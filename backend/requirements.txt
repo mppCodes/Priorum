@@ -1,21 +1,19 @@
-fastapi==0.111.0
-uvicorn[standard]==0.30.1
-python-dotenv==1.0.1
-httpx==0.27.0
-pydantic==2.7.1
-pydantic-settings==2.3.0
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-dotenv>=1.0.0
+httpx>=0.27.0
+pydantic>=2.10.0
+pydantic-settings>=2.5.0
 
 # Notion
-notion-client==2.2.1
+notion-client>=2.2.1
 
 # Microsoft Graph (Outlook / Teams)
-msal==1.29.0
+msal>=1.29.0
 
 # AI Agent
-openai==1.35.3
-langchain==0.2.5
-langchain-openai==0.1.8
+openai>=1.35.0
 
 # Utilidades
-python-dateutil==2.9.0
-pytz==2024.1
+python-dateutil>=2.9.0
+pytz>=2024.1
