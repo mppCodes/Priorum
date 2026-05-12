@@ -1,0 +1,51 @@
+# Secrets & environment variables
+.env
+.env.*
+*.env
+!.env.example
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Node modules
+node_modules/
+
+# Build outputs
+dist/
+build/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE / editor
+.vscode/settings.json
+.idea/
+
+# Docker volumes / data
+data/
+postgres_data/
+
+# Certificates & keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Lock files (large, rarely useful for context)
+package-lock.json
+yarn.lock
+poetry.lock
