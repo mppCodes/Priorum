@@ -1,19 +1,18 @@
-import os
 import requests
 from requests.auth import HTTPBasicAuth
 from app.models.task import TaskCreate
 
-JIRA_BASE_URL = "https://hackatongrupodosviewnext.atlassian.net"
-JIRA_EMAIL = os.getenv("JIRA_EMAIL")
-JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN")
+from app.config import get_settings
 
-auth = HTTPBasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
+settings = get_settings()
+
+JIRA_BASE_URL = "https://hackatongrupodosviewnext.atlassian.net"
 
 HEADERS = {
     "Accept": "application/json",
     "Content-Type": "application/json",
 }
-
+auth = HTTPBasicAuth(settings.jira_email, settings.jira_api_token)
 
 def map_priority(priority: str):
     """

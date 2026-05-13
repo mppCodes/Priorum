@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "priorum_rag"
 
+    # ── Jira ────────────────────────────────────────────────────────────────────
+    jira_email: str = ""
+    jira_api_token: str = ""
+
     class Config:
         # Busca .env en la raíz del proyecto; si no existe, busca en backend/
         env_file = (str(_ROOT / ".env"), ".env")
