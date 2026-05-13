@@ -234,7 +234,7 @@ def _mock_chat(message: str) -> ChatResponse:
         "Para activar el agente IA, configura OPENAI_API_KEY en el archivo .env. "
         f'Recibí tu mensaje: "{message}"'
     )
-    now = datetime.utcnow()
+    now = datetime.now(datetime.timezone.utc)
     _chat_history.append(ChatMessage(role="user",  content=message, timestamp=now))
     _chat_history.append(ChatMessage(role="agent", content=reply,   timestamp=now))
     return ChatResponse(message=reply, timestamp=now)
