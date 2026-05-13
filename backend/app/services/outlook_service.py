@@ -15,9 +15,23 @@ settings = get_settings()
 _token_cache: dict = {}
 
 
+def _looks_like_uuid(value: str) -> bool:
+    """Detecta si un valor parece un UUID (Secret ID en lugar de Secret Value)."""
+    import re
+    return bool(re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", value, re.I))
+
+
 def _get_access_token() -> str:
     """Obtiene un token de acceso para Microsoft Graph usando MSAL."""
     import msal
+
+    # Validación preventiva: el Secret Value nunca es un UUID puro
+    if _looks_like_uuid(settings.ms_client_secret):
+        raise RuntimeError(
+            "MS_CLIENT_SECRET parece un Secret ID (UUID), no un Secret Value. "
+            "En Azure Portal → App Registrations → Certificates & Secrets, "
+            "copia el campo 'Value' (no el 'Secret ID') y actualiza MS_CLIENT_SECRET en .env"
+        )
 
     app = msal.ConfidentialClientApplication(
         client_id=settings.ms_client_id,
@@ -28,7 +42,15 @@ def _get_access_token() -> str:
         scopes=["https://graph.microsoft.com/.default"]
     )
     if "access_token" not in result:
-        raise RuntimeError(f"Error obteniendo token MS Graph: {result.get('error_description')}")
+        error_desc = result.get("error_description", "")
+        # Error específico: Secret ID en lugar de Secret Value
+        if "AADSTS7000215" in error_desc:
+            raise RuntimeError(
+                "AADSTS7000215 – MS_CLIENT_SECRET contiene el Secret ID, no el Secret Value. "
+                "Ve a Azure Portal → App Registrations → tu app → Certificates & Secrets "
+                "y copia el campo 'Value' (la cadena larga, no el UUID)."
+            )
+        raise RuntimeError(f"Error obteniendo token MS Graph: {error_desc}")
     return result["access_token"]
 
 
@@ -118,11 +140,23 @@ async def get_events(
     period: str = "day",
     date_ref: Optional[str] = None,
 ) -> list[Event]:
-    """Obtiene eventos del calendario de Outlook."""
+    """Obtiene eventos del calendario de Outlook.
+
+    Si las credenciales no están configuradas o son inválidas, devuelve datos de ejemplo.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
     if not settings.ms_client_id or not settings.ms_tenant_id:
         return _mock_events()
 
     import httpx
+
+    try:
+        headers = _graph_headers()
+    except RuntimeError as exc:
+        logger.warning("Outlook no disponible (credenciales inválidas): %s", exc)
+        return _mock_events()
 
     ref = date.fromisoformat(date_ref) if date_ref else date.today()
     start, end = _date_range(period, ref)
@@ -136,12 +170,15 @@ async def get_events(
         f"&$top=50"
     )
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(url, headers=_graph_headers())
-        resp.raise_for_status()
-        data = resp.json()
-
-    return [_parse_graph_event(ev) for ev in data.get("value", [])]
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+        return [_parse_graph_event(ev) for ev in data.get("value", [])]
+    except Exception as exc:
+        logger.warning("Error obteniendo eventos de Outlook, usando mock: %s", exc)
+        return _mock_events()
 
 
 async def create_event(data: EventCreate) -> Event:

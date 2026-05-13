@@ -1,5 +1,9 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+from pathlib import Path
+
+# Raíz del proyecto (dos niveles arriba de este fichero: backend/app/config.py → raíz)
+_ROOT = Path(__file__).parent.parent.parent
 
 
 class Settings(BaseSettings):
@@ -27,7 +31,8 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 
     class Config:
-        env_file = ".env"
+        # Busca .env en la raíz del proyecto; si no existe, busca en backend/
+        env_file = (str(_ROOT / ".env"), ".env")
         env_file_encoding = "utf-8"
 
 
