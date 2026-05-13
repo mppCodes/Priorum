@@ -11,27 +11,28 @@ El backend está organizado con **FastAPI** y una estructura modular:
 - `app/config.py` → configuración de la aplicación mediante variables de entorno.
 - `app/models` → definiciones de modelos de datos con **Pydantic**.
 - `app/routers` → rutas agrupadas por dominio (Tareas, Calendario, Agente IA).
-- `app/services` → lógica de negocio, comunicación con APIs externas (Notion, Outlook, OpenAI).
+- `app/services` → lógica de negocio, comunicación con APIs externas (Notion, Outlook, OpenAI, Jira).
+- `logging_config.py` → configuración central de logs.
+- `docs/db_schema.md` → esquema de la base de datos.
 
 ---
 
 ## 2. main.py
 - Crea una instancia de `FastAPI` con título, versión y rutas de documentación `/api/docs`.
 - Añade middleware CORS configurable.
-- Incluye routers (`tasks`, `calendar`, `agent`) con prefijo común `settings.api_prefix`.
+- Incluye routers (`tasks`, `calendar`, `agent`, otros nuevos como Jira si aplica) con prefijo común `settings.api_prefix`.
 - Define endpoint `/api/health` para verificar estado.
-  
-**Posible integración BBDD**: Aquí se podría registrar la conexión global antes de incluir routers.  
+- **Nueva integración BBDD**: Inicializa conexión global a la base de datos y sesión antes de incluir routers.
+
 **Posible integración MCP**: Se podría añadir un router o endpoint específico para herramientas MCP.
 
 ---
 
 ## 3. config.py
 - Usa `BaseSettings` (pydantic_settings) para cargar configuración desde `.env`.
-- Variables para Notion, Microsoft Graph, OpenAI, CORS y nombre de aplicación.
+- Variables para Notion, Microsoft Graph, OpenAI, Jira, CORS, nombre de aplicación y ahora credenciales de base de datos (host, puerto, usuario, contraseña, nombre).
 - `get_settings()` con **lru_cache** para que sea singleton.
-  
-**Punto clave BBDD**: Añadir credenciales y configuración de la base de datos aquí.  
+
 **Punto clave MCP**: Añadir configuración de endpoints MCP y tokens.
 
 ---
@@ -47,9 +48,9 @@ El backend está organizado con **FastAPI** y una estructura modular:
 
 ### task.py
 - Enums `Priority`, `Period` y modelos para tareas.
+- Integración con BBDD: adaptados para ORM (SQLAlchemy) manteniendo validación Pydantic.
 
-**Posible integración BBDD**: Los modelos Pydantic se mapearían a modelos ORM (SQLAlchemy, etc.) para persistencia.  
-**Posible integración MCP**: Podría añadirse un modelo específico para datos de MCP.
+**Posible integración MCP**: Añadir modelos específicos para datos recibidos o enviados a MCP.
 
 ---
 
@@ -65,9 +66,12 @@ El backend está organizado con **FastAPI** y una estructura modular:
 
 ### tasks.py
 - Endpoints CRUD para tareas, sincronización y comentarios.
-- Usa `notion_service`.
+- Usa `notion_service` y ahora también interacción con la base de datos.
 
-**Posible integración BBDD**: Estos endpoints podrían llamar servicios que consulten la base de datos además de APIs externas.  
+### jira_service.py (en routers o servicios)
+- Endpoints para integrar y sincronizar tareas/eventos con Jira.
+- Usa `jira_service` para la lógica.
+
 **Posible integración MCP**: Añadir endpoints que interactúen con MCP.
 
 ---
@@ -89,19 +93,36 @@ El backend está organizado con **FastAPI** y una estructura modular:
 - CRUD de eventos.
 - Mock para pruebas.
 
-**Posible integración BBDD**: Lógica de estos servicios podría registrar resultados en la base de datos o obtener datos desde ella.  
+### jira_service.py
+- Conexión cliente Jira usando API REST.
+- CRUD de incidencias/tareas.
+- Sincronización con BBDD.
+
+**Integración BBDD**: Servicios consultan y actualizan información en la base de datos.
+
 **Posible integración MCP**: Añadir servicio que llame a MCP y procese resultados.
 
 ---
 
-## 7. Comentarios sugeridos en el código
-En puntos clave (conexiones externas, estructuras de datos, configuración), se deberían añadir comentarios para indicar lugares donde se integrará BBDD o MCP.
+## 7. logging_config.py
+- Establece formato y nivel de logs para toda la aplicación.
+- Útil para depuración e integración de MCP (monitorizar requests/responses).
 
 ---
 
-## 8. Próximos pasos
-1. Añadir comentarios en código para marcar integraciones futuras.
-2. Documentar dependencias e interacciones entre servicios.
-3. Diseñar esquema de BBDD y planificar migraciones.
-4. Planificar endpoints MCP y definir modelos asociados.
-5. Actualizar esta documentación conforme se implementen cambios.
+## 8. docs/db_schema.md
+- Describe las tablas, campos y relaciones de la base de datos.
+- Documentación clave para adaptar servicios y routers a persistencia.
+
+---
+
+## 9. Comentarios sugeridos en el código
+En puntos clave (conexiones externas, estructuras de datos, configuración), añadir comentarios para indicar dónde se integrará MCP y cómo interactúa con la base de datos.
+
+---
+
+## 10. Próximos pasos
+1. Revisar y comentar la inicialización de la BBDD en `main.py`.
+2. Documentar dependencias e interacciones entre servicios y la base de datos.
+3. Diseñar endpoints MCP y definir modelos asociados.
+4. Actualizar esta documentación conforme se implementen cambios.
