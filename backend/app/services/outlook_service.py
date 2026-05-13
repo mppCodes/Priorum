@@ -41,8 +41,13 @@ def _get_access_token() -> str:
     result = app.acquire_token_for_client(
         scopes=["https://graph.microsoft.com/.default"]
     )
+    if result is None:
+        raise RuntimeError(
+            "MSAL devolvió None al solicitar el token. "
+            "Verifica que MS_CLIENT_ID, MS_TENANT_ID y MS_CLIENT_SECRET sean correctos."
+        )
     if "access_token" not in result:
-        error_desc = result.get("error_description", "")
+        error_desc = result.get("error_description", "Sin descripción de error")
         # Error específico: Secret ID en lugar de Secret Value
         if "AADSTS7000215" in error_desc:
             raise RuntimeError(
@@ -63,8 +68,13 @@ def _graph_headers() -> dict:
 
 def _parse_graph_event(ev: dict) -> Event:
     """Convierte un evento de Graph API en un objeto Event."""
-    start_dt = ev.get("start", {}).get("dateTime", "")
-    end_dt   = ev.get("end",   {}).get("dateTime", "")
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.debug("Parseando evento Graph: id=%s subject=%s", ev.get("id"), ev.get("subject"))
+
+    # Usar "or {}" para manejar campos presentes pero con valor null
+    start_dt = (ev.get("start") or {}).get("dateTime", "")
+    end_dt   = (ev.get("end")   or {}).get("dateTime", "")
 
     # Calcula duración en minutos
     duration = 30
@@ -77,7 +87,7 @@ def _parse_graph_event(ev: dict) -> Event:
             pass
 
     # Determina tipo
-    categories = [c.lower() for c in ev.get("categories", [])]
+    categories = [c.lower() for c in (ev.get("categories") or [])]
     if "personal" in categories:
         ev_type = EventType.personal
     elif "bloqueo" in categories or "block" in categories:
@@ -86,9 +96,9 @@ def _parse_graph_event(ev: dict) -> Event:
         ev_type = EventType.reunion
 
     attendees = [
-        a.get("emailAddress", {}).get("name", "")
-        for a in ev.get("attendees", [])
-        if a.get("emailAddress", {}).get("name")
+        (a.get("emailAddress") or {}).get("name", "")
+        for a in (ev.get("attendees") or [])
+        if (a.get("emailAddress") or {}).get("name")
     ]
 
     time_str = ""
@@ -111,7 +121,7 @@ def _parse_graph_event(ev: dict) -> Event:
         type=ev_type,
         notes=ev.get("bodyPreview", ""),
         attendees=attendees,
-        teams_url=ev.get("onlineMeeting", {}).get("joinUrl"),
+        teams_url=(ev.get("onlineMeeting") or {}).get("joinUrl"),
     )
 
 
@@ -154,8 +164,15 @@ async def get_events(
 
     try:
         headers = _graph_headers()
-    except RuntimeError as exc:
-        logger.warning("Outlook no disponible (credenciales inválidas): %s", exc)
+        # Solicitar tiempos en zona horaria de Madrid para evitar conversiones manuales
+        headers["Prefer"] = 'outlook.timezone="Europe/Madrid"'
+    except Exception as exc:
+        import traceback
+        logger.warning(
+            "Outlook no disponible (error obteniendo token): %s\n%s",
+            exc,
+            traceback.format_exc(),
+        )
         return _mock_events()
 
     ref = date.fromisoformat(date_ref) if date_ref else date.today()
@@ -168,45 +185,126 @@ async def get_events(
         f"&endDateTime={end.isoformat()}Z"
         f"&$orderby=start/dateTime"
         f"&$top=50"
+        f"&$select=id,subject,start,end,categories,attendees,bodyPreview,onlineMeeting,showAs"
     )
 
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.get(url, headers=headers)
+            logger.info("Graph API status: %s", resp.status_code)
             resp.raise_for_status()
             data = resp.json()
-        return [_parse_graph_event(ev) for ev in data.get("value", [])]
+            logger.info("Graph API response keys: %s", list(data.keys()) if isinstance(data, dict) else type(data))
+            events_raw = data.get("value", []) if isinstance(data, dict) else []
+            logger.info("Número de eventos recibidos: %d", len(events_raw))
+            parsed = []
+            for i, ev in enumerate(events_raw):
+                try:
+                    parsed.append(_parse_graph_event(ev))
+                except Exception as parse_exc:
+                    import traceback
+                    logger.error(
+                        "Error parseando evento[%d] id=%s subject=%s: %s\n%s",
+                        i,
+                        ev.get("id", "?") if isinstance(ev, dict) else "?",
+                        ev.get("subject", "?") if isinstance(ev, dict) else "?",
+                        parse_exc,
+                        traceback.format_exc(),
+                    )
+            return parsed
     except Exception as exc:
-        logger.warning("Error obteniendo eventos de Outlook, usando mock: %s", exc)
+        import traceback
+        logger.warning(
+            "Error obteniendo eventos de Outlook, usando mock: %s\n%s",
+            exc,
+            traceback.format_exc(),
+        )
         return _mock_events()
 
 
 async def create_event(data: EventCreate) -> Event:
     """Crea un evento en Outlook."""
-    if not settings.ms_client_id:
+    import logging
+    import traceback
+    logger = logging.getLogger(__name__)
+
+    # Si no hay credenciales completas, devolver evento local (sin Outlook)
+    if not settings.ms_client_id or not settings.ms_tenant_id or not settings.ms_user_email:
+        logger.warning(
+            "create_event: credenciales incompletas → ms_client_id=%s, ms_tenant_id=%s, ms_user_email=%s. "
+            "El evento se crea solo en local.",
+            "OK" if settings.ms_client_id else "VACÍO",
+            "OK" if settings.ms_tenant_id else "VACÍO",
+            "OK" if settings.ms_user_email else "VACÍO",
+        )
         return Event(id=str(uuid.uuid4()), **data.model_dump())
 
     import httpx
 
+    # Obtener token
+    try:
+        headers = _graph_headers()
+        logger.info("create_event: token de Outlook obtenido correctamente")
+    except Exception as exc:
+        logger.error(
+            "create_event: error obteniendo token: %s\n%s",
+            exc,
+            traceback.format_exc(),
+        )
+        raise RuntimeError(f"No se pudo autenticar con Outlook: {exc}") from exc
+
     start_iso = f"{data.date}T{data.time}:00"
     end_dt    = datetime.fromisoformat(start_iso) + timedelta(minutes=data.duration)
 
-    body = {
+    # Mapear el tipo de evento a categorías de Outlook
+    # _parse_graph_event usa estas categorías para determinar el tipo al leer
+    _type_to_category: dict[str, list[str]] = {
+        "personal": ["Personal"],
+        "bloqueo":  ["Bloqueo"],
+        "reunion":  [],
+    }
+    categories = _type_to_category.get(str(data.type.value if hasattr(data.type, "value") else data.type), [])
+
+    body: dict = {
         "subject": data.title,
         "start":   {"dateTime": start_iso, "timeZone": "Europe/Madrid"},
         "end":     {"dateTime": end_dt.isoformat(), "timeZone": "Europe/Madrid"},
-        "body":    {"contentType": "text", "content": data.notes},
+        "body":    {"contentType": "text", "content": data.notes or ""},
         "attendees": [
             {"emailAddress": {"address": a}, "type": "required"}
-            for a in data.attendees
+            for a in (data.attendees or [])
         ],
     }
+    if categories:
+        body["categories"] = categories
+
+    logger.info(
+        "create_event: POST Graph API → subject=%r start=%s user=%s",
+        data.title, start_iso, settings.ms_user_email,
+    )
 
     url = f"https://graph.microsoft.com/v1.0/users/{settings.ms_user_email}/events"
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(url, json=body, headers=_graph_headers())
-        resp.raise_for_status()
-        return _parse_graph_event(resp.json())
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(url, json=body, headers=headers)
+            logger.info("create_event: Graph API status=%s", resp.status_code)
+            if not resp.is_success:
+                logger.error(
+                    "create_event: error de Graph API status=%s body=%s",
+                    resp.status_code,
+                    resp.text,
+                )
+            resp.raise_for_status()
+            created = resp.json()
+            logger.info("create_event: evento creado en Outlook id=%s", created.get("id"))
+            return _parse_graph_event(created)
+    except Exception as exc:
+        logger.error(
+            "create_event: excepción llamando a Graph API: %s\n%s",
+            exc,
+            traceback.format_exc(),
+        )
+        raise
 
 
 async def update_event(event_id: str, data: EventUpdate) -> Event:
@@ -247,11 +345,11 @@ def _mock_events() -> list[Event]:
     today = date.today().isoformat()
     return [
         Event(id="e1", title="Daily standup",    date=today, time="09:00", duration=15,
-              type="reunion",  attendees=["Ana", "Paco", "Marta"]),
+              type=EventType.reunion,  attendees=["Ana", "Paco", "Marta"]),
         Event(id="e2", title="Revisión sprint",  date=today, time="11:00", duration=60,
-              type="reunion",  attendees=["Todo el equipo"]),
+              type=EventType.reunion,  attendees=["Todo el equipo"]),
         Event(id="e3", title="Cita médica",      date=today, time="13:30", duration=30,
-              type="personal", attendees=[]),
+              type=EventType.personal, attendees=[]),
         Event(id="e4", title="1:1 con producto", date=today, time="16:00", duration=30,
-              type="reunion",  attendees=["Laura"]),
+              type=EventType.reunion,  attendees=["Laura"]),
     ]
