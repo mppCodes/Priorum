@@ -1,23 +1,31 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from enum import Enum
 
 
 class EventType(str, Enum):
-    reunion  = "reunion"
-    personal = "personal"
-    bloqueo  = "bloqueo"
+    meeting = "meeting"
+    call = "call"
+    focus = "focus"
+    out_of_office = "out_of_office"
+    reminder = "reminder"
+    other = "other"
+
+
+class Attendee(BaseModel):
+    email: str
+    name: Optional[str] = None
 
 
 class EventBase(BaseModel):
-    title:     str
-    date:      str                        # YYYY-MM-DD
-    time:      str                        # HH:MM
-    duration:  int = 30                   # minutos
-    type:      EventType = EventType.personal
-    notes:     str = ""
-    attendees: list[str] = Field(default_factory=list)
+    title: str
+    start: datetime
+    end: datetime
+    description: Optional[str] = None
+    location: Optional[str] = None
+    attendees: Optional[List[Attendee]] = []
+    type: Optional[EventType] = None  # tipo del evento (si aplica)
 
 
 class EventCreate(EventBase):
@@ -25,20 +33,24 @@ class EventCreate(EventBase):
 
 
 class EventUpdate(BaseModel):
-    title:     Optional[str]       = None
-    date:      Optional[str]       = None
-    time:      Optional[str]       = None
-    duration:  Optional[int]       = None
-    type:      Optional[EventType] = None
-    notes:     Optional[str]       = None
-    attendees: Optional[list[str]] = None
+    title: Optional[str] = None
+    start: Optional[datetime] = None
+    end: Optional[datetime] = None
+    description: Optional[str] = None
+    location: Optional[str] = None
+    attendees: Optional[List[Attendee]] = None
+    type: Optional[EventType] = None
 
 
-class Event(EventBase):
-    id:           str
-    outlook_id:   Optional[str] = None
-    teams_url:    Optional[str] = None
-    created_at:   Optional[datetime] = None
-    updated_at:   Optional[datetime] = None
-
-    model_config = {"from_attributes": True}
+class Event(BaseModel):
+    id: Optional[str] = Field(default=None, description="Mongo ObjectId (string)")
+    external_id: Optional[str] = None  # ID del evento en Microsoft Graph
+    title: str
+    description: Optional[str] = None
+    start: datetime
+    end: datetime
+    location: Optional[str] = None
+    attendees: Optional[List[Attendee]] = []
+    source: Optional[str] = "outlook"
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None

@@ -12,6 +12,7 @@ Aplicación de gestión de tareas y calendario con agente IA integrado.
 | Calendario | Microsoft Graph API (Outlook / Teams) |
 | Agente IA | OpenAI GPT-4o |
 | Contenedores | Docker + Docker Compose |
+| Base de datos | MongoDB |
 
 ## Estructura del proyecto
 
@@ -38,7 +39,8 @@ Priorum/
 │       ├── config.py          # Configuración (pydantic-settings)
 │       ├── models/            # Pydantic models: task, event, agent
 │       ├── routers/           # Endpoints: /tasks, /calendar, /agent
-│       └── services/          # Integraciones: Notion, Outlook, OpenAI
+│       ├── services/          # Integraciones: Notion, Outlook, OpenAI
+│       └── db.py              # Conexión a MongoDB
 │
 ├── .env.example               # Plantilla de variables de entorno
 ├── docker-compose.yml
@@ -52,6 +54,9 @@ Priorum/
 ```bash
 cp .env.example .env
 # Edita .env con tus credenciales de Notion, Microsoft y OpenAI
+# Añade también:
+MONGO_URI=mongodb://priorum-mongodb:27017
+MONGO_DB=priorum
 ```
 
 ### 2. Backend (Python)
@@ -81,10 +86,36 @@ npm run dev
 
 La app estará disponible en `http://localhost:3000`
 
-### 4. Con Docker Compose
+### 4. Levantar MongoDB con Docker Compose
+
+1. **Instalar Docker Desktop**  
+   Asegúrate de tener Docker Desktop instalado y en ejecución.
+
+2. **Levantar el servicio MongoDB**  
+   Desde la carpeta `Priorum` ejecuta:
+   ```bash
+   docker compose up -d mongodb
+   ```
+
+3. **Verificar estado**  
+   Comprueba que el servicio está corriendo:
+   ```bash
+   docker compose ps
+   ```
+   Debes ver `priorum-mongodb` con estado `Up`.
+
+4. **Conexión desde el backend**  
+   El backend ya está configurado para conectarse automáticamente a MongoDB usando `motor`.  
+   Puedes acceder a colecciones con:
+   ```python
+   from app.db import get_collection
+   col = get_collection("mi_coleccion")
+   ```
+
+### 5. Levantar todos los servicios
 
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 ## Funcionalidades
@@ -93,6 +124,7 @@ docker-compose up --build
 - **Tareas**: sincronizadas con Notion, filtro por día / semana / mes / año y por prioridad
 - **Calendario**: sincronizado con Outlook/Teams, vista timeline con filtro de período
 - **Agente IA**: chat en lenguaje natural para consultar tareas, reuniones y obtener sugerencias de horario
+- **Base de datos MongoDB**: almacenamiento flexible de datos de IA y tareas
 
 ## Modo demo (sin credenciales)
 
