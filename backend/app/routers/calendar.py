@@ -19,7 +19,10 @@ async def list_events(
 @router.post("", response_model=Event, status_code=201)
 async def create_event(data: EventCreate):
     """Crea un nuevo evento en Outlook."""
-    return await outlook_service.create_event(data)
+    try:
+        return await outlook_service.create_event(data)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
 
 @router.patch("/{event_id}", response_model=Event)
