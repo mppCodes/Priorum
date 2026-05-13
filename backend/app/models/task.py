@@ -30,22 +30,22 @@ class TaskCreate(TaskBase):
 
 
 class TaskUpdate(BaseModel):
-    title:    Optional[str]      = None
-    project:  Optional[str]      = None
-    priority: Optional[Priority] = None
-    deadline: Optional[str]      = None
+    title:    Optional[str]       = None
+    project:  Optional[str]       = None
+    priority: Optional[Priority]  = None
+    deadline: Optional[str]       = None
     tags:     Optional[list[str]] = None
-    done:     Optional[bool]     = None
+    done:     Optional[bool]      = None
     subtasks: Optional[list[str]] = None
     comments: Optional[list[str]] = None
 
 
 class Task(TaskBase):
-    id:        str
-    done:      bool = False
-    subtasks:  list[str] = Field(default_factory=list)
-    comments:  list[str] = Field(default_factory=list)
-    notion_id: Optional[str] = None
+    id:         str
+    done:       bool = False
+    subtasks:   list[str] = Field(default_factory=list)
+    comments:   list[str] = Field(default_factory=list)
+    notion_id:  Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
