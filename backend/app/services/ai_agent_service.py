@@ -1,10 +1,13 @@
 """
 Servicio del agente IA.
-Usa OpenAI (GPT-4o) para priorizar tareas, sugerir horarios y responder preguntas.
+Delega al orquestador de agentes (openai-agents SDK) para priorización
+y al Chat Agent para conversación.
+Mantiene fallback a OpenAI directo / mocks cuando las keys no están configuradas.
 """
 from typing import Any
 from datetime import datetime, timezone
 import json
+import logging
 
 from app.config import get_settings
 from app.models.agent import (
@@ -13,139 +16,34 @@ from app.models.agent import (
     ScheduleRequest, ScheduleResponse,
 )
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # Historial de conversación en memoria (por sesión de servidor)
 _chat_history: list[ChatMessage] = []
 
-SYSTEM_PROMPT = """Eres Priorum, un asistente de productividad personal inteligente.
-Tu objetivo es ayudar al usuario a gestionar su día de trabajo de forma eficiente.
 
-Tienes acceso al contexto del usuario:
-- Sus tareas pendientes (de Notion) con prioridad, deadline y proyecto
-- Sus eventos del calendario (de Outlook/Teams) con hora y duración
-- Los slots libres del día
-
-Cuando respondas:
-- Sé conciso y directo (máximo 3-4 frases)
-- Usa el contexto proporcionado para dar respuestas personalizadas
-- Si no tienes suficiente contexto, indícalo brevemente
-- Responde siempre en español
-"""
-
-PRIORITIES_PROMPT = """Analiza las tareas y eventos del usuario y devuelve una lista priorizada.
-
-Contexto:
-{context}
-
-Devuelve ÚNICAMENTE un JSON válido con este formato exacto:
-{
-  "priorities": [
-    {
-      "rank": 1,
-      "title": "título de la tarea",
-      "why": "razón breve de por qué es prioritaria (1-2 frases)",
-      "time": "tiempo estimado (ej: 45 min)",
-      "tag": "alta|media|baja"
-    }
-  ],
-  "reasoning": "explicación general de la distribución del día (2-3 frases)"
-}
-
-Ordena por urgencia + impacto. Máximo 5 tareas.
-"""
-
-SCHEDULE_PROMPT = """Sugiere cómo distribuir las tareas en los slots libres del día.
-
-Contexto:
-{context}
-
-Devuelve ÚNICAMENTE un JSON válido con este formato:
-{
-  "schedule": [
-    {
-      "time": "HH:MM",
-      "task": "título de la tarea o actividad",
-      "duration": 45,
-      "type": "task|break|event"
-    }
-  ],
-  "reasoning": "explicación de la distribución propuesta (2-3 frases)"
-}
-"""
-
-
-def _get_openai_client():
-    from openai import OpenAI
-    return OpenAI(api_key=settings.openai_api_key)
-
-
-def _build_context(data: dict[str, Any]) -> str:
-    """Construye un resumen de contexto legible para el LLM."""
-    lines = []
-
-    tasks = data.get("tasks", [])
-    if tasks:
-        lines.append(f"TAREAS PENDIENTES ({len(tasks)}):")
-        for t in tasks[:10]:  # máximo 10
-            lines.append(
-                f"  - [{t.get('priority', '?').upper()}] {t.get('title', '')} "
-                f"(Proyecto: {t.get('project', '-')}, Deadline: {t.get('deadline', '-')})"
-            )
-
-    events = data.get("events", [])
-    if events:
-        lines.append(f"\nEVENTOS HOY ({len(events)}):")
-        for e in events[:10]:
-            lines.append(
-                f"  - {e.get('time', '?')} {e.get('title', '')} "
-                f"({e.get('duration', 30)} min)"
-            )
-
-    free_slots = data.get("free_slots", [])
-    if free_slots:
-        lines.append("\nSLOTS LIBRES:")
-        for slot in free_slots:
-            lines.append(f"  - {slot.get('from', '?')} – {slot.get('to', '?')}")
-
-    date_str = data.get("date", datetime.now(timezone.utc).isoformat())
-    lines.insert(0, f"FECHA: {date_str[:10]}\n")
-
-    return "\n".join(lines)
-
+# ── Chat (delegado al Chat Agent) ───────────────────────────────────────────
 
 async def chat(message: str, context: dict[str, Any]) -> ChatResponse:
-    """Responde a un mensaje del usuario usando el historial y el contexto."""
+    """Responde a un mensaje del usuario usando el Chat Agent con memoria."""
     if not settings.openai_api_key:
         return _mock_chat(message)
 
-    client = _get_openai_client()
-    context_str = _build_context(context)
+    try:
+        from app.agents.chat_agent import run_chat_agent
 
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "system", "content": f"Contexto actual del usuario:\n{context_str}"},
-    ]
+        # Convertir historial a formato de mensajes para el agente
+        history = [
+            {"role": msg.role, "content": msg.content}
+            for msg in _chat_history[-20:]  # últimos 20 mensajes (10 turnos)
+        ]
 
-    # Añade historial reciente (últimos 10 mensajes)
-    for msg in _chat_history[-10:]:
-        messages.append({
-            "role": "user" if msg.role == "user" else "assistant",
-            "content": msg.content,
-        })
+        reply = await run_chat_agent(message, context, history=history)
+    except Exception as exc:
+        logger.exception("Error en Chat Agent, fallback a respuesta simple")
+        reply = f"Error procesando tu mensaje: {exc}"
 
-    messages.append({"role": "user", "content": message})
-
-    response = client.chat.completions.create(
-        model=settings.openai_model,
-        messages=messages,
-        temperature=settings.openai_temperature,
-        max_tokens=512,
-    )
-
-    reply = response.choices[0].message.content or ""
-
-    # Guarda en historial
     now = datetime.now(timezone.utc)
     _chat_history.append(ChatMessage(role="user",  content=message, timestamp=now))
     _chat_history.append(ChatMessage(role="agent", content=reply,   timestamp=now))
@@ -153,70 +51,58 @@ async def chat(message: str, context: dict[str, Any]) -> ChatResponse:
     return ChatResponse(message=reply, timestamp=now)
 
 
+# ── Prioridades (delegado al Orquestador) ────────────────────────────────────
+
 async def get_priorities(req: PrioritiesRequest) -> PrioritiesResponse:
-    """Genera la lista de prioridades del día usando el LLM."""
+    """Genera la lista de prioridades del día usando el orquestador de agentes."""
     if not settings.openai_api_key:
         return _mock_priorities(req)
 
-    client = _get_openai_client()
-    context_str = _build_context({
-        "tasks":  [t for t in req.tasks],
-        "events": [e for e in req.events],
-        "date":   req.date,
-    })
+    try:
+        from app.agents.orchestrator import run_orchestrator
+        result = await run_orchestrator(target_date=req.date)
 
-    prompt = PRIORITIES_PROMPT.format(context=context_str)
-    response = client.chat.completions.create(
-        model=settings.openai_model,
-        messages=[
-            {"role": "system", "content": "Eres un asistente de productividad. Responde SOLO con JSON válido."},
-            {"role": "user",   "content": prompt},
-        ],
-        temperature=0.2,
-        max_tokens=1024,
-        response_format={"type": "json_object"},
-    )
+        # Mapear el output del orquestador al modelo PrioritiesResponse
+        priorities = []
+        for p in result.get("priorities", []):
+            priorities.append(PriorityItem(
+                rank=p.get("rank", 0),
+                title=p.get("title", ""),
+                why=p.get("why", ""),
+                time=f"{p.get('estimated_minutes', 30)} min",
+                tag=p.get("priority_tag", "media"),
+            ))
 
-    raw = response.choices[0].message.content or "{}"
-    data = json.loads(raw)
-    return PrioritiesResponse(
-        priorities=[PriorityItem(**p) for p in data.get("priorities", [])],
-        reasoning=data.get("reasoning", ""),
-    )
+        return PrioritiesResponse(
+            priorities=priorities,
+            reasoning=result.get("reasoning", ""),
+        )
+    except Exception as exc:
+        logger.exception("Error en Orquestador, fallback a mock")
+        return _mock_priorities(req)
 
+
+# ── Schedule (delegado al Orquestador) ───────────────────────────────────────
 
 async def get_schedule(req: ScheduleRequest) -> ScheduleResponse:
-    """Genera una sugerencia de horario para el día."""
+    """Genera una sugerencia de horario para el día usando el orquestador."""
     if not settings.openai_api_key:
         return ScheduleResponse(reasoning="Configura OPENAI_API_KEY para obtener sugerencias de horario.")
 
-    client = _get_openai_client()
-    context_str = _build_context({
-        "tasks":      req.tasks,
-        "events":     req.events,
-        "free_slots": req.free_slots,
-        "date":       req.date,
-    })
+    try:
+        from app.agents.orchestrator import run_orchestrator
+        result = await run_orchestrator(target_date=req.date)
 
-    prompt = SCHEDULE_PROMPT.format(context=context_str)
-    response = client.chat.completions.create(
-        model=settings.openai_model,
-        messages=[
-            {"role": "system", "content": "Eres un asistente de productividad. Responde SOLO con JSON válido."},
-            {"role": "user",   "content": prompt},
-        ],
-        temperature=0.2,
-        max_tokens=1024,
-        response_format={"type": "json_object"},
-    )
+        return ScheduleResponse(
+            schedule=result.get("schedule", []),
+            reasoning=result.get("reasoning", ""),
+        )
+    except Exception as exc:
+        logger.exception("Error en Orquestador para schedule, fallback")
+        return ScheduleResponse(reasoning=f"Error generando horario: {exc}")
 
-    raw = response.choices[0].message.content or "{}"
-    data = json.loads(raw)
-    return ScheduleResponse(
-        schedule=data.get("schedule", []),
-        reasoning=data.get("reasoning", ""),
-    )
 
+# ── Historial ────────────────────────────────────────────────────────────────
 
 def get_history() -> list[ChatMessage]:
     return list(_chat_history)
@@ -234,7 +120,7 @@ def _mock_chat(message: str) -> ChatResponse:
         "Para activar el agente IA, configura OPENAI_API_KEY en el archivo .env. "
         f'Recibí tu mensaje: "{message}"'
     )
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
     _chat_history.append(ChatMessage(role="user",  content=message, timestamp=now))
     _chat_history.append(ChatMessage(role="agent", content=reply,   timestamp=now))
     return ChatResponse(message=reply, timestamp=now)

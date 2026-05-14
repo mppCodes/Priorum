@@ -3,26 +3,92 @@ import { X, Calendar } from "lucide-react";
 import { COLORS } from "../../constants/colors.js";
 import { s } from "../../constants/styles.js";
 
-const EMPTY_FORM = {
-  title: "",
-  date: "",
-  time: "",
-  duration: "30",
-  type: "personal",
-  notes: "",
+// ── Utilidades de tiempo ──────────────────────────────────────────────────────
+
+/** Genera todos los slots HH:MM de 15 en 15 minutos (00:00 → 23:45) */
+const TIME_SLOTS = Array.from({ length: 96 }, (_, i) => {
+  const h = Math.floor(i / 4).toString().padStart(2, "0");
+  const m = ((i % 4) * 15).toString().padStart(2, "0");
+  return `${h}:${m}`;
+});
+
+/** Fecha de hoy en formato YYYY-MM-DD */
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+/** Hora actual redondeada al siguiente slot de 15 minutos */
+const currentTimeSlot = () => {
+  const now = new Date();
+  const total = now.getHours() * 60 + now.getMinutes();
+  const rounded = Math.ceil(total / 15) * 15;
+  const h = Math.floor(rounded / 60) % 24;
+  const m = rounded % 60;
+  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
 };
 
+/** Suma minutos a un slot HH:MM */
+const addMinutes = (time, mins) => {
+  const [h, m] = time.split(":").map(Number);
+  const total = h * 60 + m + mins;
+  const nh = Math.floor(total / 60) % 24;
+  const nm = total % 60;
+  return `${nh.toString().padStart(2, "0")}:${nm.toString().padStart(2, "0")}`;
+};
+
+/** Diferencia en minutos entre dos slots HH:MM */
+const diffMinutes = (start, end) => {
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  const diff = eh * 60 + em - (sh * 60 + sm);
+  return diff > 0 ? diff : diff + 24 * 60;
+};
+
+// ── Estado inicial ────────────────────────────────────────────────────────────
+
+const makeEmptyForm = () => {
+  const start = currentTimeSlot();
+  return {
+    title:     "",
+    date:      todayISO(),
+    startTime: start,
+    endTime:   addMinutes(start, 30),
+    type:      "personal",
+    notes:     "",
+  };
+};
+
+// ── Estilos compartidos ───────────────────────────────────────────────────────
+
+/** Igual que s.input pero fuerza tema oscuro en los controles nativos */
+const darkInput = { ...s.input, colorScheme: "dark" };
+const darkSelect = { ...s.input, colorScheme: "dark", cursor: "pointer" };
+
+// ── Componente ────────────────────────────────────────────────────────────────
+
 export default function AddEventModal({ onClose, onSubmit }) {
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState(makeEmptyForm);
   const [loading, setLoading] = useState(false);
 
   const set = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+
+  /** Al cambiar la hora de inicio, mantiene la duración actual */
+  const handleStartChange = (newStart) => {
+    const duration = diffMinutes(form.startTime, form.endTime);
+    const newEnd = addMinutes(newStart, duration > 0 ? duration : 30);
+    setForm((prev) => ({ ...prev, startTime: newStart, endTime: newEnd }));
+  };
 
   const handleSubmit = async () => {
     if (!form.title.trim()) return;
     setLoading(true);
     try {
-      await onSubmit?.({ ...form, duration: parseInt(form.duration) });
+      await onSubmit?.({
+        title:    form.title,
+        date:     form.date,
+        time:     form.startTime,
+        duration: diffMinutes(form.startTime, form.endTime),
+        type:     form.type,
+        notes:    form.notes,
+      });
       onClose();
     } catch {
       // el error se gestiona en el hook
@@ -30,6 +96,13 @@ export default function AddEventModal({ onClose, onSubmit }) {
       setLoading(false);
     }
   };
+
+  // Solo mostrar horas de fin posteriores a la de inicio
+  const endSlots = TIME_SLOTS.filter((t) => {
+    const [sh, sm] = form.startTime.split(":").map(Number);
+    const [th, tm] = t.split(":").map(Number);
+    return th * 60 + tm > sh * 60 + sm;
+  });
 
   return (
     <div
@@ -78,38 +151,65 @@ export default function AddEventModal({ onClose, onSubmit }) {
           </button>
         </div>
 
-        {/* Campos */}
-        {[
-          { key: "title", label: "Título", placeholder: "Cita médica, revisión…" },
-          { key: "date",  label: "Fecha",  placeholder: "ej: 2025-05-15" },
-          { key: "time",  label: "Hora",   placeholder: "ej: 09:30" },
-          { key: "notes", label: "Notas",  placeholder: "Descripción opcional" },
-        ].map((f) => (
-          <div key={f.key} style={{ marginBottom: 12 }}>
-            <label style={s.label}>{f.label}</label>
-            <input
-              value={form[f.key]}
-              onChange={(e) => set(f.key, e.target.value)}
-              placeholder={f.placeholder}
-              style={s.input}
-            />
-          </div>
-        ))}
-
-        {/* Duración */}
+        {/* Título */}
         <div style={{ marginBottom: 12 }}>
-          <label style={s.label}>Duración (min)</label>
-          <select
-            value={form.duration}
-            onChange={(e) => set("duration", e.target.value)}
-            style={{ ...s.input }}
-          >
-            {["15", "30", "45", "60", "90", "120"].map((d) => (
-              <option key={d} value={d}>
-                {d} min
-              </option>
-            ))}
-          </select>
+          <label style={s.label}>Título</label>
+          <input
+            value={form.title}
+            onChange={(e) => set("title", e.target.value)}
+            placeholder="Cita médica, revisión…"
+            style={s.input}
+          />
+        </div>
+
+        {/* Fecha */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={s.label}>Fecha</label>
+          <input
+            type="date"
+            value={form.date}
+            onChange={(e) => set("date", e.target.value)}
+            style={darkInput}
+          />
+        </div>
+
+        {/* Hora inicio / fin */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <div style={{ flex: 1 }}>
+            <label style={s.label}>Inicio</label>
+            <select
+              value={form.startTime}
+              onChange={(e) => handleStartChange(e.target.value)}
+              style={darkSelect}
+            >
+              {TIME_SLOTS.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={s.label}>Fin</label>
+            <select
+              value={form.endTime}
+              onChange={(e) => set("endTime", e.target.value)}
+              style={darkSelect}
+            >
+              {endSlots.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Notas */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={s.label}>Notas</label>
+          <input
+            value={form.notes}
+            onChange={(e) => set("notes", e.target.value)}
+            placeholder="Descripción opcional"
+            style={s.input}
+          />
         </div>
 
         {/* Tipo */}
@@ -148,10 +248,7 @@ export default function AddEventModal({ onClose, onSubmit }) {
             <Calendar size={13} />
             {loading ? "Creando…" : "Crear en Outlook"}
           </button>
-          <button
-            style={{ ...s.btn("secondary") }}
-            onClick={onClose}
-          >
+          <button style={{ ...s.btn("secondary") }} onClick={onClose}>
             Cancelar
           </button>
         </div>

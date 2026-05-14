@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Priorum – Flujo de Agentes IA</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #f8fafc;
+      margin-bottom: 0.4rem;
+      letter-spacing: -0.5px;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #94a3b8;
+      font-size: 0.95rem;
+      margin-bottom: 2rem;
+    }
+
+    .tabs {
+      display: flex;
+      justify-content: center;
+      gap: 0.4rem;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+    }
+
+    .tab {
+      padding: 0.45rem 1rem;
+      border-radius: 9999px;
+      border: 1px solid #334155;
+      background: #1e293b;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 0.82rem;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .tab:hover { border-color: #6366f1; color: #e2e8f0; }
+    .tab.active { background: #6366f1; border-color: #6366f1; color: #fff; font-weight: 600; }
+
+    .diagram-container {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 1rem;
+      padding: 2rem;
+      max-width: 1300px;
+      margin: 0 auto 1.5rem;
+      overflow-x: auto;
+    }
+
+    .diagram-container .mermaid {
+      display: flex;
+      justify-content: center;
+    }
+
+    .agent-desc {
+      max-width: 1300px;
+      margin: 0 auto 1.5rem;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 1rem;
+      padding: 1.2rem 1.5rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    .agent-desc h3 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #a5b4fc;
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .agent-desc ul {
+      list-style: none;
+      font-size: 0.82rem;
+      color: #94a3b8;
+      line-height: 1.8;
+    }
+
+    .agent-desc ul li::before { content: "▸ "; color: #6366f1; }
+
+    .tool-badge {
+      display: inline-block;
+      background: #0f2027;
+      border: 1px solid #14b8a6;
+      color: #99f6e4;
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 0.75rem;
+      font-family: monospace;
+      margin: 1px;
+    }
+
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    .legend {
+      max-width: 1300px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 0.8rem;
+    }
+
+    .legend-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 0.75rem;
+      padding: 0.9rem 1rem;
+    }
+
+    .legend-card h3 {
+      font-size: 0.82rem;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .legend-card ul {
+      list-style: none;
+      font-size: 0.78rem;
+      color: #94a3b8;
+      line-height: 1.7;
+    }
+
+    .legend-card ul li::before { content: "→ "; color: #6366f1; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .dot-purple { background: #a855f7; }
+    .dot-green  { background: #22c55e; }
+    .dot-blue   { background: #3b82f6; }
+    .dot-orange { background: #f97316; }
+    .dot-teal   { background: #14b8a6; }
+    .dot-pink   { background: #ec4899; }
+  </style>
+</head>
+<body>
+
+<h1>🤖 Priorum – Flujo de Agentes IA</h1>
+<p class="subtitle">Arquitectura multi-agente · openai-agents SDK · gpt-4o-nextai</p>
+
+<div class="tabs">
+  <button class="tab active" onclick="showPanel('overview')">🗺️ Vista General</button>
+  <button class="tab" onclick="showPanel('tasks')">📋 Tasks Agent</button>
+  <button class="tab" onclick="showPanel('calendar')">📅 Calendar Agent</button>
+  <button class="tab" onclick="showPanel('scoring')">🏆 Scoring Agent</button>
+  <button class="tab" onclick="showPanel('context')">🔍 Context Agent</button>
+  <button class="tab" onclick="showPanel('chat')">💬 Chat Agent</button>
+  <button class="tab" onclick="showPanel('orchestrator')">🎯 Orchestrator</button>
+  <button class="tab" onclick="showPanel('api')">🌐 API Endpoints</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PANEL: Vista General -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="panel-overview" class="panel active">
+  <div class="diagram-container">
+    <div class="mermaid">
+flowchart TD
+    USER["👤 Usuario\nFrontend / Swagger"]:::user
+
+    subgraph API["🌐 FastAPI — /api/agent/"]
+        EP1["POST /chat"]:::ep
+        EP2["POST /priorities"]:::ep
+        EP3["POST /schedule"]:::ep
+        EP4["POST /tasks-analysis"]:::ep
+    end
+
+    SVC["ai_agent_service.py"]:::service
+
+    subgraph PIPELINE["⚡ Pipeline Orquestador (priorities / schedule)"]
+        direction TB
+        subgraph P1["Fase 1 — asyncio.gather"]
+            TA["📋 Tasks Agent\nNotion tools"]:::agent
+            CA["📅 Calendar Agent\nOutlook tools"]:::agent
+        end
+        subgraph P2["Fase 2 — asyncio.gather"]
+            SA["🏆 Scoring Agent\n(sin tools)"]:::agent
+            CTA["🔍 Context Agent\n(sin tools)"]:::agent
+        end
+        ORC["🎯 Orchestrator LLM\nJSON final"]:::orch
+    end
+
+    CHAT["💬 Chat Agent\nNotion + Outlook tools\n+ memoria"]:::chat
+
+    NOTION["🗄️ Notion API"]:::ext
+    GRAPH["📧 Microsoft Graph"]:::ext
+
+    USER --> API
+    EP1 --> SVC --> CHAT
+    EP2 & EP3 --> SVC --> PIPELINE
+    EP4 --> TA
+    P1 --> P2 --> ORC
+    TA & CHAT --> NOTION
+    CA & CHAT --> GRAPH
+
+    classDef user    fill:#1e3a5f,stroke:#3b82f6,color:#93c5fd
+    classDef ep      fill:#1e3a5f,stroke:#3b82f6,color:#93c5fd
+    classDef service fill:#1e293b,stroke:#475569,color:#cbd5e1
+    classDef agent   fill:#14532d,stroke:#22c55e,color:#bbf7d0
+    classDef orch    fill:#3b0764,stroke:#a855f7,color:#e9d5ff
+    classDef chat    fill:#1e1b4b,stroke:#6366f1,color:#c7d2fe
+    classDef ext     fill:#1c1917,stroke:#78716c,color:#d6d3d1
+    </div>
+  </div>
+  <div class="legend">
+    <div class="legend-card">
+      <h3><span class="dot dot-green"></span> Tasks Agent</h3>
+      <ul><li>Lee y analiza tareas de Notion</li><li>Detecta urgencias y bloqueos</li><li>Temperatura: 0.1</li></ul>
+    </div>
+    <div class="legend-card">
+      <h3><span class="dot dot-green"></span> Calendar Agent</h3>
+      <ul><li>Lee eventos de Outlook</li><li>Calcula slots libres</li><li>Temperatura: 0.1</li></ul>
+    </div>
+    <div class="legend-card">
+      <h3><span class="dot dot-green"></span> Scoring Agent</h3>
+      <ul><li>Score 0–100 por tarea</li><li>Fórmula: urgencia+impacto+viabilidad</li><li>Temperatura: 0.1</li></ul>
+    </div>
+    <div class="legend-card">
+      <h3><span class="dot dot-green"></span> Context Agent</h3>
+      <ul><li>Señales día/hora/patrones</li><li>Forecast de productividad</li><li>Temperatura: 0.2</li></ul>
+    </div>
+    <div class="legend-card">
+      <h3><span class="dot dot-purple"></span> Orchestrator</h3>
+      <ul><li>Integra los 4 outputs</li><li>Priorización definitiva</li><li>Temperatura: 0.2</li></ul>
+    </div>
+    <div class="legend-card">
+      <h3><span class="dot dot-blue"></span> Chat Agent</h3>
+      <ul><li>Conversación natural</li><li>Memoria 20 mensajes</li><li>Temperatura: 0.5</li></ul>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PANEL: Tasks Agent -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="panel-tasks" class="panel">
+  <div class="diagram-container">
+    <div class="mermaid">
+flowchart TD
+    TRIGGER["⚡ Disparado por\nOrchestrator (Fase 1)\no endpoint /tasks-analysis"]:::trigger
+
+    TA["📋 Tasks Agent\nLLM gpt-4o-nextai · temp 0.1"]:::agent
+
+    subgraph DECISION["🧠 Razonamiento del agente"]
+        D1["¿Deadline hoy o mañana?\n→ status: urgente"]:::decision
+        D2["¿Sin actualizar 3+ días?\n→ status: posiblemente_bloqueada"]:::decision
+        D3["¿Subtareas sin completar?\n→ indica bloqueo"]:::decision
+        D4["¿Mismo proyecto varias tareas?\n→ agrupa"]:::decision
+    end
+
+    subgraph TOOLS_TA["🔧 Tools disponibles"]
+        GT["get_tasks\n(period, date, priority, project)\n→ Llama SIEMPRE al inicio"]:::tool
+        UT["update_task\n(task_id, title, priority, deadline, done)\n→ Solo si orquestador lo pide"]:::tool_disabled
+        AC["add_comment\n(task_id, comment)\n→ Solo si orquestador lo pide"]:::tool_disabled
+    end
+
+    NS["🗄️ notion_service.py\nNotion REST API"]:::svc
+
+    OUT_TA["📤 JSON Output\n{tasks: [...], summary: {...}}"]:::output
+
+    TRIGGER --> TA
+    TA -->|"1. Obtiene todas las tareas"| GT
+    GT --> NS
+    NS -->|"lista de Task objects"| TA
+    TA --> DECISION
+    DECISION --> OUT_TA
+    TA -.->|"solo si se le indica"| UT & AC
+    UT & AC --> NS
+
+    classDef trigger      fill:#1e3a5f,stroke:#3b82f6,color:#93c5fd
+    classDef agent        fill:#14532d,stroke:#22c55e,color:#bbf7d0
+    classDef decision     fill:#1c1917,stroke:#f97316,color:#fed7aa
+    classDef tool         fill:#0f2027,stroke:#14b8a6,color:#99f6e4
+    classDef tool_disabled fill:#1c1917,stroke:#475569,color:#64748b,stroke-dasharray:4
+    classDef svc          fill:#1c1917,stroke:#78716c,color:#d6d3d1
+    classDef output       fill:#3b0764,stroke:#a855f7,color:#e9d5ff
+    </div>
+  </div>
+  <div class="agent-desc">
+    <div>
+      <h3>¿Qué hace?</h3>
+      <ul>
+        <li>Llama a <span class="tool-badge">get_tasks</span> con period="day" y period="week"</li>
+        <li>Para cada tarea evalúa: deadline, subtareas, última actualización, proyecto</li>
+        <li>Asigna <code>status_analysis</code>: activa | urgente | posiblemente_bloqueada</li>
+        <li>Agrupa tareas del mismo proyecto</li>
+        <li>Genera un <code>summary</code> con totales y distribución por proyecto</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Cuándo usa cada tool</h3>
+      <ul>
+        <li><span class="tool-badge">get_tasks</span> — siempre al inicio, para obtener los datos</li>
+        <li><span class="tool-badge">update_task</span> — solo si el orquestador lo indica explícitamente</li>
+        <li><span class="tool-badge">add_comment</span> — solo si el orquestador lo indica explícitamente</li>
+        <li>No modifica datos por iniciativa propia</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PANEL: Calendar Agent -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="panel-calendar" class="panel">
+  <div class="diagram-container">
+    <div class="mermaid">
+flowchart TD
+    TRIGGER2["⚡ Disparado por\nOrchestrator (Fase 1)\ncon target_date"]:::trigger
+
+    CA["📅 Calendar Agent\nLLM gpt-4o-nextai · temp 0.1"]:::agent
+
+    subgraph TOOLS_CA["🔧 Tools disponibles"]
+        GE["get_events\n(date, period)\n→ Llama SIEMPRE al inicio"]:::tool
+        CE["create_event\n(title, start, end, description, location)\n→ Solo si se solicita explícitamente"]:::tool_disabled
+        UE["update_event\n(event_id, title, start, end)\n→ Solo si se solicita explícitamente"]:::tool_disabled
+        DE["delete_event\n(event_id)\n→ Solo si se solicita explícitamente"]:::tool_disabled
+    end
+
+    OS["📧 outlook_service.py\nMicrosoft Graph API"]:::svc
+
+    subgraph CALC["🧠 Cálculo de disponibilidad"]
+        C1["Horario 08:00–18:00\n= 600 min totales"]:::calc
+        C2["Resta duración de eventos\n= minutos ocupados"]:::calc
+        C3["Slots libres ≥ 20 min\n= útiles para trabajo"]:::calc
+        C4["Slots ≥ 90 min consecutivos\n= deep_work_slot"]:::calc
+        C5["3+ reuniones seguidas\n= carga cognitiva alta"]:::calc
+    end
+
+    OUT_CA["📤 JSON Output\n{events, free_slots, summary}"]:::output
+
+    TRIGGER2 --> CA
+    CA -->|"1. Obtiene eventos del día"| GE
+    GE --> OS
+    OS -->|"lista de Event objects"| CA
+    CA --> CALC
+    CALC --> OUT_CA
+    CA -.->|"solo si se solicita"| CE & UE & DE
+    CE & UE & DE --> OS
+
+    classDef trigger      fill:#1e3a5f,stroke:#3b82f6,color:#93c5fd
+    classDef agent        fill:#14532d,stroke:#22c55e,color:#bbf7d0
+    classDef tool         fill:#0f2027,stroke:#14b8a6,color:#99f6e4
+    classDef tool_disabled fill:#1c1917,stroke:#475569,color:#64748b,stroke-dasharray:4
+    classDef svc          fill:#1c1917,stroke:#78716c,color:#d6d3d1
+    classDef calc         fill:#1c1917,stroke:#f97316,color:#fed7aa
+    classDef output       fill:#3b0764,stroke:#a855f7,color:#e9d5ff
+    </div>
+  </div>
+  <div class="agent-desc">
+    <div>
+      <h3>¿Qué hace?</h3>
+      <ul>
+        <li>Llama a <span class="tool-badge">get_events</span> para el día objetivo</li>
+        <li>Calcula slots libres entre 08:00 y 18:00</li>
+        <li>Descarta slots menores de 20 minutos</li>
+        <li>Identifica bloques ≥90 min como "deep_work"</li>
+        <li>Detecta rachas de 3+ reuniones seguidas → carga cognitiva alta</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Cuándo usa cada tool</h3>
+      <ul>
+        <li><span class="tool-badge">get_events</span> — siempre al inicio para obtener el calendario</li>
+        <li><span class="tool-badge">create_event</span> — solo si el orquestador o usuario lo pide</li>
+        <li><span class="tool-badge">update_event</span> — solo si el orquestador o usuario lo pide</li>
+        <li><span class="tool-badge">delete_event</span> — solo si el orquestador o usuario lo pide</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PANEL: Scoring Agent -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="panel-scoring" class="panel">
+  <div class="diagram-container">
+    <div class="mermaid">
+flowchart TD
+    TRIGGER3["⚡ Disparado por\nOrchestrator (Fase 2)\nrecibe outputs de Fase 1"]:::trigger
+
+    IN_SA["📥 Inputs recibidos\ntasks_analysis + calendar_analysis"]:::input
+
+    SA["🏆 Scoring Agent\nLLM gpt-4o-nextai · temp 0.1\n⚠️ Sin tools — solo razonamiento"]:::agent
+
+    subgraph FORMULA["📐 Fórmula de scoring (0–100 pts)"]
+        direction LR
+        URG["Urgencia\n0–40 pts\nDeadline hoy→40\nMañana→30\nSemana→20\nSin deadline→0-10"]:::formula
+        IMP["Impacto\n0–30 pts\nPrioridad alta→30\nMedia→15\nBaja→5\nBloqueada→-10"]:::formula
+        VIA["Viabilidad\n0–30 pts\nDeep work slot→30\nSlot standard→20\nSin slots→5"]:::formula
+    end
+
+    RANK["🔢 Ordenación\nde mayor a menor score_total"]:::process
+
+    ASSIGN["📌 Asignación de slots\ncada tarea → slot más adecuado"]:::process
+
+    OUT_SA["📤 JSON Output\n{scored_tasks, day_feasibility, reasoning}"]:::output
+
+    TRIGGER3 --> IN_SA --> SA
+    SA --> FORMULA
+    URG & IMP & VIA -->|"score_total = suma"| RANK
+    RANK --> ASSIGN --> OUT_SA
+
+    classDef trigger  fill:#1e3a5f,stroke:#3b82f6,color:#93c5fd
+    classDef input    fill:#1e293b,stroke:#475569,color:#cbd5e1
+    classDef agent    fill:#14532d,stroke:#22c55e,color:#bbf7d0
+    classDef formula  fill:#1c1917,stroke:#f97316,color:#fed7aa
+    classDef process  fill:#0f2027,stroke:#14b8a6,color:#99f6e4
+    classDef output   fill:#3b0764,stroke:#a855f7,color:#e9d5ff
+    </div>
+  </div>
+  <div class="agent-desc">
+    <div>
+      <h3>¿Qué hace?</h3>
+      <ul>
+        <li>Recibe el output del Tasks Agent y del Calendar Agent</li>
+        <li>Aplica la fórmula: urgencia (0-40) + impacto (0-30) + viabilidad (0-30)</li>
+        <li>Ordena las tareas de mayor a menor score_total</li>
+        <li>Asigna el slot libre más adecuado a cada tarea</li>
+        <li>Evalúa si el día es "completo", "parcial" o "sobrecargado"</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Sin tools — solo razonamiento</h3>
+      <ul>
+        <li>No llama a ninguna API externa</li>
+        <li>Trabaja exclusivamente con los datos recibidos como input</li>
+        <li>Penaliza tareas "posiblemente_bloqueada" (-10 pts en impacto)</li>
+        <li>Premia tareas con subtareas en deep_work_slots (+30 viabilidad)</li>
+        <li>El campo "why" debe mencionar datos concretos (deadline, slot, prioridad)</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PANEL: Context Agent -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="panel-context" class="panel">
+  <div class="diagram-container">
+    <div class="mermaid">
+flowchart TD
+    TRIGGER4["⚡ Disparado por\nOrchestrator (Fase 2)\nrecibe datetime + outputs Fase 1"]:::trigger
+
+    IN_CTA["📥 Inputs recibidos\ndatetime + tasks_analysis + calendar_analysis"]:::input
+
+    CTA["🔍 Context Agent\nLLM gpt-4o-nextai · temp 0.2\n⚠️ Sin tools — solo análisis"]:::agent
+
+    subgraph SIGNALS["📡 Señales analizadas"]
+        direction TB
+        S1["📅 Día de la semana\nLunes→energía alta\nViernes→tareas cortas\nJueves→cierres"]:::signal
+        S2["🕐 Hora del día\nAntes 10:00→concentración\n10-13→colaboración\n14-16→mecánico\n16-18→segundo pico"]:::signal
+        S3["📊 Patrones en datos\n3+ reuniones→fatiga cognitiva\n70%+ mismo proyecto→sprint\nUrgentes sin slots→alerta"]:::signal
+    end
+
+    OUT_CTA["📤 JSON Output\n{day_of_week, time_of_day_phase,\nproductivity_forecast, signals, recommendation}"]:::output
+
+    TRIGGER4 --> IN_CTA --> CTA
+    CTA --> SIGNALS
+    S1 & S2 & S3 --> OUT_CTA
+
+    classDef trigger  fill:#1e3a5f,stroke:#3b82f6,color:#93c5fd
+    classDef input    fill:#1e293b,stroke:#475569,color:#cbd5e1
+    classDef agent    fill:#14532d,stroke:#22c55e,color:#bbf7d0
+    classDef signal   fill:#1c1917,stroke:#f97316,color:#fed7aa
+    classDef output   fill:#3b0764,stroke:#a855f7,color:#e9d5ff
+    </div>
+  </div>
+  <div class="agent-desc">
+    <div>
+      <h3>¿Qué hace?</h3>
+      <ul>
+        <li>Analiza el día de la semana y la hora actual</li>
+        <li>Cruza con los datos de tareas y calendario</li>
+        <li>Genera señales con tipo, mensaje e impacto (positivo/neutro/negativo)</li>
+        <li>Produce un forecast de productividad: alta | media | baja</li>
+        <li>Da una recomendación al orquestador (máx. 2 frases)</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Sin tools — solo análisis contextual</h3>
+      <ul>
+        <li>No llama a ninguna API externa</li>
+        <li>Trabaja con datetime + outputs de Tasks y Calendar</li>
+        <li>Alerta si hay urgentes sin slots disponibles hoy</li>
+        <li>Detecta modo "sprint" si 70%+ tareas son del mismo proyecto</li>
+        <li>No repite información ya presente en otros outputs</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PANEL: Chat Agent -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="panel-chat" class="panel">
+  <div class="diagram-container">
+    <div class="mermaid">
+flowchart TD
+    USER2["👤 Usuario\nmensaje en lenguaje natural"]:::user
+
+    HIST["💾 _chat_history\nÚltimos 20 mensajes\n(10 turnos)"]:::memory
+
+    CHAT["💬 Chat Agent\nLLM gpt-4o-nextai · temp 0.5"]:::agent
+
+    subgraph NOTION_T["📋 Notion Tools"]
+        GT3["get_tasks\n→ cuando el usuario pregunta\npor sus tareas o prioridades"]:::tool
+        CT3["create_task\n→ cuando el usuario pide\ncreación de tarea"]:::tool
+        UT3["update_task\n→ cuando el usuario pide\ncambiar título/prioridad/deadline"]:::tool
+        DT3["delete_task\n→ SOLO tras confirmación\nexplícita del usuario"]:::tool_warn
+        AC3["add_comment\n→ cuando el usuario pide\nañadir nota a una tarea"]:::tool
+    end
+
+    subgraph OUTLOOK_T["📅 Outlook Tools"]
+        GE3["get_events\n→ cuando el usuario pregunta\npor su agenda"]:::tool
+        CE3["create_event\n→ cuando el usuario pide\ncreación de evento"]:::tool
+    end
+
+    NS3["🗄️ notion_service.py"]:::svc
+    OS3["📧 outlook_service.py"]:::svc
+
+    RESP["💬 Respuesta\nen lenguaje natural"]:::output
+
+    USER2 -->|"mensaje + contexto UI"| CHAT
+    HIST -->|"historial previo"| CHAT
+    CHAT --> NOTION_T & OUTLOOK_T
+    GT3 & CT3 & UT3 & DT3 & AC3 --> NS3
+    GE3 & CE3 --> OS3
+    CHAT --> RESP
+    RESP -->|"guarda en historial"| HIST
+
+    classDef user     fill:#1e3a5f,stroke:#3b82f6,color:#93c5fd
+    classDef memory   fill:#451a03,stroke:#f97316,color:#fed7aa
+    classDef agent    fill:#1e1b4b,stroke:#6366f1,color:#c7d2fe
+    classDef tool     fill:#0f2027,stroke:#14b8a6,color:#99f6e4
+    classDef tool_warn fill:#3b1a00,stroke:#f97316,color:#fed7aa
+    classDef svc      fill:#1c1917,stroke:#78716c,color:#d6d3d1
+    classDef output   fill:#14532d,stroke:#22c55e,color:#bbf7d0
+    </div>
+  </div>
+  <div class="agent-desc">
+    <div>
+      <h3>¿Qué hace?</h3>
+      <ul>
+        <li>Mantiene conversación en lenguaje natural con el usuario</li>
+        <li>Recibe los últimos 20 mensajes del historial como contexto</li>
+        <li>Recibe el contexto de la UI (vista activa, resumen del día)</li>
+        <li>Ejecuta acciones directamente sin pedir confirmación (excepto borrar)</li>
+        <li>Responde en el idioma del usuario (español/inglés)</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Cuándo usa cada tool</h3>
+      <ul>
+        <li><span class="tool-badge">get_tasks</span> — "¿qué tengo pendiente?" / "¿cuáles son mis prioridades?"</li>
+        <li><span class="tool-badge">create_task</span> — "crea una tarea para X"</li>
+        <li><span class="tool-badge">update_task</span> — "cambia la prioridad de X" / "mueve el deadline"</li>
+        <li><span class="tool-badge">delete_task</span> — ⚠️ solo tras confirmación explícita ("sí", "confirma")</li>
+        <li><span class="tool-badge">add_comment</span> — "añade una nota a la tarea X"</li>
+        <li><span class="tool-badge">get_events</span> — "¿qué tengo hoy?" / "¿cuándo tengo libre?"</li>
+        <li><span class="tool-badge">create_event</span> — "añade una reunión el jueves a las 10"</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PANEL: Orchestrator -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="panel-orchestrator" class="panel">
+  <div class="diagram-container">
+    <div class="mermaid">
+flowchart TD
+    TRIGGER5["⚡ Disparado por\nai_agent_service\nget_priorities() / get_schedule()"]:::trigger
+
+    ORC_FN["run_orchestrator(target_date)"]:::service
+
+    subgraph PHASE1["⚡ Fase 1 — asyncio.gather (paralelo)"]
+        TA5["📋 Tasks Agent\nrun_tasks_agent()"]:::agent
+        CA5["📅 Calendar Agent\nrun_calendar_agent(date)"]:::agent
+    end
+
+    subgraph PHASE2["⚡ Fase 2 — asyncio.gather (paralelo)"]
+        SA5["🏆 Scoring Agent\nrun_scoring_agent(tasks, calendar)"]:::agent
+        CTA5["🔍 Context Agent\nrun_context_agent(tasks, calendar, now)"]:::agent
+    end
+
+    COMBINE["📦 Combina los 4 outputs\nen un único JSON"]:::process
+
+    ORC_LLM["🎯 Orchestrator LLM\ngpt-4o-nextai · temp 0.2\n⚠️ Sin tools"]:::orch
+
+    subgraph LOGIC["🧠 Lógica del orquestador"]
+        L1["Detecta contradicciones\nentre agentes"]:::logic
+        L2["Ajusta ranking si Context\ndetectó señales relevantes"]:::logic
+        L3["Máximo 5 tareas\nen priorities"]:::logic
+        L4["Tareas urgentes sin slot\n→ van a alerts, no a priorities"]:::logic
+    end
+
+    OUT_ORC["📤 JSON Final\n{date, priorities, schedule,\nreasoning, alerts}"]:::output
+
+    TRIGGER5 --> ORC_FN --> PHASE1
+    TA5 & CA5 -->|"outputs"| PHASE2
+    SA5 & CTA5 -->|"outputs"| COMBINE
+    TA5 & CA5 -->|"también"| COMBINE
+    COMBINE --> ORC_LLM
+    ORC_LLM --> LOGIC
+    LOGIC --> OUT_ORC
+
+    classDef trigger  fill:#1e3a5f,stroke:#3b82f6,color:#93c5fd
+    classDef service  fill:#1e293b,stroke:#475569,color:#cbd5e1
+    classDef agent    fill:#14532d,stroke:#22c55e,color:#bbf7d0
+    classDef process  fill:#0f2027,stroke:#14b8a6,color:#99f6e4
+    classDef orch     fill:#3b0764,stroke:#a855f7,color:#e9d5ff
+    classDef logic    fill:#1c1917,stroke:#f97316,color:#fed7aa
+    classDef output   fill:#1e3a5f,stroke:#3b82f6,color:#93c5fd
+    </div>
+  </div>
+  <div class="agent-desc">
+    <div>
+      <h3>¿Qué hace?</h3>
+      <ul>
+        <li>Lanza Tasks + Calendar en paralelo (Fase 1)</li>
+        <li>Con esos resultados lanza Scoring + Context en paralelo (Fase 2)</li>
+        <li>Combina los 4 outputs y los pasa al LLM orquestador</li>
+        <li>El LLM detecta contradicciones y ajusta el ranking</li>
+        <li>Genera máximo 5 prioridades + schedule + reasoning + alerts</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Sin tools — solo síntesis</h3>
+      <ul>
+        <li>No llama a ninguna API externa directamente</li>
+        <li>Ajusta el ranking del Scoring si Context detectó señales</li>
+        <li>Tareas urgentes sin slot → alerts (tipo "sin_slots"), no en priorities</li>
+        <li>El schedule no puede solapar tareas con reuniones reales</li>
+        <li>Cada "why" debe ser diferente y específico</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PANEL: API Endpoints -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="panel-api" class="panel">
+  <div class="diagram-container">
+    <div class="mermaid">
+flowchart LR
+    subgraph FRONT["🖥️ Frontend / Cliente"]
+        F1["AgentPanel\nchat"]:::front
+        F2["PriorityView\nprioridades del día"]:::front
+        F3["ScheduleView\nhorario sugerido"]:::front
+        F4["Dev / Test\nSwagger UI"]:::front
+    end
+
+    subgraph ROUTER["🌐 /api/agent/ — agent.py router"]
+        EP_CHAT["POST /chat\nChatRequest\n{message, context}"]:::ep
+        EP_PRIO["POST /priorities\nPrioritiesRequest\n{tasks, events, date}"]:::ep
+        EP_SCHED["POST /schedule\nScheduleRequest\n{tasks, events, free_slots, date}"]:::ep
+        EP_HIST_GET["GET /history\n→ HistoryResponse"]:::ep
+        EP_HIST_DEL["DELETE /history\n204"]:::ep
+        EP_TEST["POST /tasks-analysis\nTasksAgentRequest\n{message?}"]:::ep
+    end
+
+    subgraph AGENTS["🤖 Agentes"]
+        CHAT6["💬 Chat Agent\n+ memoria"]:::agent
+        ORC6["🎯 Orchestrator\n5 agentes en pipeline"]:::orch
+        TA6["📋 Tasks Agent\n(directo)"]:::agent
+    end
+
+    F1 --> EP_CHAT --> CHAT6
+    F2 --> EP_PRIO --> ORC6
+    F3 --> EP_SCHED --> ORC6
+    F4 --> EP_TEST --> TA6
+    EP_HIST_GET & EP_HIST_DEL -->|"_chat_history"| MEM6["💾 Memoria"]:::mem
+
+    classDef front fill:#1e3a5f,stroke:#3b82f6,color:#93c5fd
+    classDef ep    fill:#1e293b,stroke:#475569,color:#cbd5e1
+    classDef agent fill:#1e1b4b,stroke:#6366f1,color:#c7d2fe
+    classDef orch  fill:#3b0764,stroke:#a855f7,color:#e9d5ff
+    classDef mem   fill:#451a03,stroke:#f97316,color:#fed7aa
+    </div>
+  </div>
+  <div class="agent-desc">
+    <div>
+      <h3>Endpoints disponibles</h3>
+      <ul>
+        <li><code>POST /api/agent/chat</code> → Chat Agent con memoria</li>
+        <li><code>POST /api/agent/priorities</code> → Orquestador completo (5 agentes)</li>
+        <li><code>POST /api/agent/schedule</code> → Orquestador completo (5 agentes)</li>
+        <li><code>GET /api/agent/history</code> → Historial de conversación</li>
+        <li><code>DELETE /api/agent/history</code> → Limpia el historial</li>
+        <li><code>POST /api/agent/tasks-analysis</code> → Solo Tasks Agent (test)</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Fallback sin API key</h3>
+      <ul>
+        <li>Si <code>OPENAI_API_KEY</code> no está configurada → respuestas mock</li>
+        <li>El chat devuelve un mensaje de aviso</li>
+        <li>Las prioridades devuelven las primeras 3 tareas sin análisis</li>
+        <li>El schedule devuelve un mensaje de aviso</li>
+        <li>Los mocks permiten desarrollar el frontend sin API key</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      primaryColor: '#1e293b',
+      primaryTextColor: '#e2e8f0',
+      primaryBorderColor: '#475569',
+      lineColor: '#6366f1',
+      secondaryColor: '#0f172a',
+      tertiaryColor: '#1e293b',
+      background: '#0f1117',
+      mainBkg: '#1e293b',
+      nodeBorder: '#475569',
+      clusterBkg: '#0f172a',
+      titleColor: '#f8fafc',
+      edgeLabelBackground: '#1e293b',
+      fontFamily: 'Segoe UI, system-ui, sans-serif',
+    },
+    flowchart: { curve: 'basis', padding: 20 }
+  });
+
+  function showPanel(name) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('panel-' + name).classList.add('active');
+    event.target.classList.add('active');
+  }
+</script>
+</body>
+</html>

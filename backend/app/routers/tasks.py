@@ -2,7 +2,10 @@ from fastapi import APIRouter, Query, HTTPException
 from typing import Optional
 
 from app.models.task import Task, TaskCreate, TaskUpdate, Period
+from app.services import notion_service
 from app.services import tasks_service  # usar servicio de Mongo
+
+from app.services.jira_service import create_jira_task
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -61,3 +64,10 @@ async def add_comment(task_id: str, body: dict):
     if not comment:
         raise HTTPException(status_code=400, detail="El comentario no puede estar vacío")
     return await tasks_service.update_task(task_id, TaskUpdate(comments=[comment]))
+
+@router.post("/jira", status_code=201)
+async def create_task_in_jira(data: TaskCreate):
+    """
+    Crea una tarea directamente en Jira
+    """
+    return await create_jira_task(data)

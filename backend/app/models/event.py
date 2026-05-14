@@ -6,8 +6,11 @@ from enum import Enum
 
 class EventType(str, Enum):
     meeting = "meeting"
+    reunion = "reunion"
     call = "call"
     focus = "focus"
+    personal = "personal"
+    bloqueo = "bloqueo"
     out_of_office = "out_of_office"
     reminder = "reminder"
     other = "other"

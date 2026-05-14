@@ -1,7 +1,13 @@
+import logging_config  # noqa: F401 – configura logging antes de cualquier otra importación
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.routers import tasks, calendar, agent
+from logging_config import setup_logging
+from app.services.mongo import init_db
 from app.services.mongo import init_db, close_db  # importa close_db para el shutdown
 
 # Importa los routers como objetos APIRouter
@@ -11,7 +17,16 @@ from app.routers.agent import router as agent_router
 # Opcional: diagnósticos
 from app.routers.diagnostics import router as diagnostics_router
 
+# ── App ───────────────────────────────────────────────────────────────────────
 settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Re-aplicar tras el arranque de uvicorn (que añade sus propios handlers)
+    setup_logging()
+    yield
+
 
 app = FastAPI(
     title=settings.app_name,
@@ -20,6 +35,7 @@ app = FastAPI(
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
+    lifespan=lifespan,
 )
 
 # CORS

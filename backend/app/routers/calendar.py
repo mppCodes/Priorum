@@ -24,11 +24,13 @@ async def list_events(
 
 @router.post("", response_model=Event, status_code=201)
 async def create_event(data: EventCreate):
-    """
-    Crea un evento en Mongo y, si MS Graph está configurado, también en Outlook (guardando external_id).
-    """
+    """Crea un nuevo evento en Outlook.
+    Crea un evento en Mongo y, si MS Graph está configurado, también en Outlook (guardando external_id)."""
     try:
-        return await calendar_service.create_event(data)
+        calendar_service.create_event(data)
+        return await outlook_service.create_event(data)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
