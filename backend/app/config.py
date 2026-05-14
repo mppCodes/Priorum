@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     # ── Jira ────────────────────────────────────────────────────────────────────
     jira_email: str = ""
     jira_api_token: str = ""
+    jira_mcp_url: str = "http://127.0.0.1:8000/mcp/"
 
     class Config:
         # Busca .env en la raíz del proyecto; si no existe, busca en backend/
