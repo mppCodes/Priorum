@@ -1,76 +1,99 @@
-# Documentación de Priorum
+# Documentación exhaustiva de Priorum
 
-Priorum es un sistema de gestión inteligente de tareas, eventos y agentes IA, diseñado para integrarse con múltiples servicios externos y proporcionar un flujo de trabajo automatizado y centralizado. El proyecto consta de un **backend** desarrollado con **FastAPI** y un **frontend** web moderno, acompañado de documentación técnica y esquemas que detallan su funcionamiento.
-
----
-
-## 1. Descripción general
-
-El backend está construido en **Python** usando **FastAPI** y una arquitectura modular, permitiendo añadir fácilmente nuevas integraciones como bases de datos, APIs externas o servidores MCP (Model Context Protocol). El frontend se ejecuta sobre tecnologías web estándar y frameworks modernos para ofrecer una interfaz gráfica intuitiva.
-
-### Principales funcionalidades:
-- Gestión de tareas con sincronización Notion y base de datos.
-- Gestión de eventos de calendario con integración Microsoft Outlook.
-- Servicio de agente IA para interacción, priorización y asistencia.
-- Integración con Jira para creación y sincronización de tareas.
-- Documentación y esquemas para integración de BBDD y MCP.
+Priorum es una plataforma unificada para la gestión inteligente de tareas, eventos y agentes IA.
+Incluye un **frontend** moderno (React + Vite) y un **backend** modular y extensible construido sobre FastAPI y Python 3.12, con integración de múltiples APIs externas y soporte para **Model Context Protocol (MCP)**.
 
 ---
 
-## 2. Estructura del backend
+## 1. Resumen funcional
 
-- `main.py` → Punto de entrada, inicializa la app, middleware y routers.
-- `app/config.py` → Configuración mediante `.env` para credenciales y parámetros.
-- `app/models` → Modelos de datos Pydantic y adaptaciones ORM para persistencia.
-- `app/routers` → Endpoints para tareas, calendario, agente IA y Jira.
-- `app/services` → Lógica de negocio e integración con APIs externas (Notion, Outlook, OpenAI, Jira).
-- `logging_config.py` → Configuración centralizada de logs.
-- `docs/db_schema.md` → Esquema de base de datos.
-- `mcp/jira_task_server` → Integración MCP para tareas Jira.
-
----
-
-## 3. Integraciones externas
-
-- **Notion**: CRUD de tareas con sincronización bidireccional.
-- **Microsoft Graph / Outlook**: CRUD y sincronización de eventos de calendario.
-- **OpenAI**: Procesamiento de lenguaje natural para agente IA.
-- **Jira REST API**: CRUD y sincronización de tareas Jira.
-- **Base de datos**: Persistencia de tareas y eventos.
-- **MCP**: Creación de tareas Jira desde un servidor MCP.
+El sistema permite:
+- **Gestión de tareas**: sincronización bidireccional con Notion.
+- **Gestión de calendario**: integración con Microsoft Outlook/Teams vía Microsoft Graph.
+- **Agente IA**: asistencia, priorización automática y razonamiento sobre la agenda diaria.
+- **Integración Jira**: creación y sincronización de issues con la API REST de Jira.
+- **Persistencia**: almacenamiento en MongoDB, con capacidad demo offline.
+- **Operaciones de agentes MCP**: ampliación de funcionalidades mediante herramientas diseñadas en MCP.
 
 ---
 
-## 4. Funcionamiento del agente IA
+## 2. Backend
 
-El agente IA de Priorum permite:
-- Chat interactivo para consultas.
-- Priorización automática de tareas.
-- Asistente para organización de calendario.
-- Historial de interacción.
-
-Estas capacidades pueden ampliarse con nuevas herramientas MCP y servicios externos.
-
----
-
-## 5. Documentación y esquemas
-
-Además de la presente documentación, el proyecto incluye:
-- **`docs/db_schema.md`**: Definición de tablas, campos y relaciones.
-- **`docs/agent_flow.html`**: Flujo del agente IA visual.
-- Comentarios sugeridos en código sobre puntos de interacción MCP y conexión BBDD.
+- **main.py**: inicializa FastAPI, middleware, routers y endpoints.
+- **app/config.py**: parámetros de configuración con Pydantic Settings (.env).
+- **app/models**: modelos Pydantic y ORM de tareas, eventos y agentes.
+- **app/routers**: rutas REST para tareas (`/tasks`), calendario (`/calendar`), agente IA (`/agent`) y Jira (`/jira`).
+- **app/services**: lógica de negocio e integración con APIs externas (Notion, Outlook, OpenAI, Jira).
+- **logging_config.py**: configuración centralizada de logs.
+- **mcp/**: definición de servidores MCP, por ejemplo `jira_task_server`.
+- **docs/db_schema.md**: esquema relacional/documental de la base de datos.
+- **agents/**: módulos de agentes IA especializados (chat_agent, calendar_agent).
 
 ---
 
-## 6. Próximos pasos sugeridos
+## 3. Frontend
 
-1. Detallar el funcionamiento completo del servidor MCP `jira_task_server`.
-2. Ampliar descripción de las integraciones de base de datos.
-3. Definir endpoints futuros para nuevas herramientas MCP.
-4. Mantener esta documentación actualizada con cada cambio significativo.
+- **Priorum_mockup.jsx** y componentes React: interfaz con vistas para prioridades, tareas y calendario.
+- Conexiones con el backend mediante servicios (`/services`) y hooks (`useTasks`, `useCalendar`, `useAgent`).
+- Diseño estilizado con constantes de colores y patrones de disposición.
+- Gestión visual de estados (modales, filtros, navegación lateral, barra superior).
 
 ---
 
-## 7. Resumen
+## 4. Integraciones externas
 
-Priorum integra múltiples servicios y agentes inteligentes en una plataforma unificada para gestión de tareas y eventos. Su arquitectura modular facilita futuras ampliaciones y su documentación proporciona la guía necesaria para comprender y desarrollar sobre la base existente.
+- **Notion API**:
+  - CRUD de tareas.
+  - Detecta propiedades disponibles automáticamente.
+- **Microsoft Graph API**:
+  - CRUD de eventos de calendario.
+- **OpenAI (Azure OpenAI)**:
+  - Procesamiento de lenguaje natural para agentes IA.
+- **Jira REST API**:
+  - CRUD de issues.
+- **MongoDB**:
+  - Conexión asíncrona mediante `motor`.
+- **MCP**:
+  - Posibilidad de ampliar agentes mediante herramientas externas.
+
+---
+
+## 5. Agentes IA
+
+### Chat Agent
+- Capaz de interpretar lenguaje natural y ejecutar acciones:
+  - Consultar/crear/actualizar/comentar tareas de Notion.
+  - Consultar/crear eventos de Outlook.
+  - Crear issues de Jira.
+- Usa instrucciones claras en español y tono directo.
+- Responde basándose en contexto de la UI (vista activa, resumen del día).
+
+### Calendar Agent
+- Analiza eventos de Outlook para calcular disponibilidad.
+- Identifica slots libres, trabajo profundo y carga cognitiva.
+- Devuelve siempre JSON estructurado con eventos, slots y resumen.
+
+---
+
+## 6. Demo completa
+
+### Flujo típico
+1. **Carga de prioridades**: agente IA analiza tareas/eventos.
+2. **Vista de tareas**: CRUD con Notion, filtrando por prioridad/estado.
+3. **Vista de calendario**: CRUD con Outlook y visualización por horas.
+4. **Interacción con agente**: en tiempo real (MCP + OpenAI).
+
+> El sistema puede operarse en modo demo sin credenciales, usando datos mock.
+
+---
+
+## 7. Próximos pasos sugeridos
+- Expandir instrucciones de `jira_task_server`.
+- Documentar todas las herramientas MCP disponibles.
+- Mejorar esquemas visuales con diagramas de flujo y mapas de integraciones.
+- Mantener esta documentación actualizada.
+
+---
+
+## 8. Anexo
+Se incluye el archivo `codigo_completo.txt` con un volcado íntegro del código para referencia técnica.

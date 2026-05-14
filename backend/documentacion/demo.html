@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Demo Priorum - Gestión inteligente de tareas y eventos</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background: #f4f4f4; }
+        header { background: #7C6AF7; color: white; padding: 20px; text-align: center; }
+        section { padding: 20px; }
+        h2 { color: #333; }
+        .card { background: white; border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .highlight { color: #7C6AF7; font-weight: bold; }
+        nav { background: #18181C; padding: 10px; }
+        nav a { color: #F0EFF6; margin: 0 10px; text-decoration: none; }
+        nav a:hover { text-decoration: underline; }
+        footer { background: #2A2A32; color: #8B8A99; padding: 20px; text-align: center; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Priorum - Demo</h1>
+        <p>Plataforma unificada para tareas, calendario y agentes IA</p>
+    </header>
+    <nav>
+        <a href="#prioridades">Prioridades del día</a>
+        <a href="#tareas">Gestión de Tareas</a>
+        <a href="#calendario">Calendario</a>
+        <a href="#agente">Agente IA</a>
+    </nav>
+    <section id="prioridades">
+        <h2>Prioridades del día</h2>
+        <div class="card">
+            <p>El <span class="highlight">Agente IA</span> analiza las tareas y eventos, proponiendo un orden óptimo de ejecución.</p>
+            <ul>
+                <li>Tareas bloqueantes detectadas primero</li>
+                <li>Considera disponibilidad de calendario</li>
+                <li>Identifica slots de trabajo profundo</li>
+            </ul>
+        </div>
+    </section>
+    <section id="tareas">
+        <h2>Gestión de tareas</h2>
+        <div class="card">
+            <p>Se sincroniza con <span class="highlight">Notion</span> para crear, actualizar, comentar y eliminar tareas.</p>
+            <p>Filtros por prioridad: Alta, Media, Baja y estado (pendiente/completada).</p>
+        </div>
+    </section>
+    <section id="calendario">
+        <h2>Calendario</h2>
+        <div class="card">
+            <p>Integración vía <span class="highlight">Microsoft Graph API</span> con Outlook/Teams.</p>
+            <p>Visualización por horas, colores por tipo de evento.</p>
+            <ul>
+                <li>CRUD de eventos</li>
+                <li>Añadir información de asistentes</li>
+                <li>Clasificación: reunión, personal, bloqueo</li>
+            </ul>
+        </div>
+    </section>
+    <section id="agente">
+        <h2>Agente IA</h2>
+        <div class="card">
+            <p>Interacción en lenguaje natural con el usuario. Puede:</p>
+            <ul>
+                <li>Crear tareas en Notion</li>
+                <li>Programar eventos en Outlook</li>
+                <li>Generar issues en Jira</li>
+                <li>Responder sobre agenda y prioridades</li>
+            </ul>
+            <p>Basado en <span class="highlight">OpenAI GPT</span> (Azure OpenAI).</p>
+        </div>
+    </section>
+    <footer>
+        <p>Priorum &copy; 2026 - Demo completa de funcionalidades</p>
+    </footer>
+</body>
+</html>
