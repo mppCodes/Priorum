@@ -1,4 +1,4 @@
-import { Brain, CheckSquare, Calendar, MessageSquare } from "lucide-react";
+import { Brain, CheckSquare, Calendar, MessageSquare, Settings } from "lucide-react";
 import { COLORS } from "../../constants/colors.js";
 import { s } from "../../constants/styles.js";
 
@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { id: "tasks",    icon: CheckSquare,   label: "Tareas" },
   { id: "calendar", icon: Calendar,      label: "Calendario" },
   { id: "agent",    icon: MessageSquare, label: "Agente IA" },
+  { id: "settings", icon: Settings,      label: "Configuración" },
 ];
 
 export default function Sidebar({ view, onNavigate, agentStatus = "active" }) {

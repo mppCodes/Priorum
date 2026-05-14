@@ -13,6 +13,7 @@ from app.services.mongo import init_db
 from app.routers.tasks import router as tasks_router
 from app.routers.calendar import router as calendar_router
 from app.routers.agent import router as agent_router
+from app.routers.auth import router as auth_router
 # Opcional: diagnósticos
 from app.routers.diagnostics import router as diagnostics_router
 
@@ -52,9 +53,10 @@ async def startup() -> None:
     await init_db()
 
 # Routers
-app.include_router(tasks_router,    prefix=settings.api_prefix)
-app.include_router(calendar_router, prefix=settings.api_prefix)
-app.include_router(agent_router,    prefix=settings.api_prefix)
+app.include_router(tasks_router,       prefix=settings.api_prefix)
+app.include_router(calendar_router,    prefix=settings.api_prefix)
+app.include_router(agent_router,       prefix=settings.api_prefix)
+app.include_router(auth_router,        prefix=settings.api_prefix)
 app.include_router(diagnostics_router, prefix=settings.api_prefix)  # opcional
 
 # Health simple

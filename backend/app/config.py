@@ -20,12 +20,19 @@ class Settings(BaseSettings):
     ms_tenant_id: str = ""
     ms_client_id: str = ""
     ms_client_secret: str = ""
-    ms_user_email: str = ""          # UPN del usuario cuyo calendario se lee
+    ms_user_email: str = ""          # UPN del usuario cuyo calendario se lee (fallback app-only)
+
+    # OAuth 2.0 Authorization Code Flow
+    ms_redirect_uri: str = "http://localhost:8000/api/auth/outlook/callback"
+    ms_scopes: list[str] = ["Calendars.ReadWrite", "User.Read"]
+    # URL del frontend a la que redirigir tras el callback
+    frontend_url: str = "http://localhost:5173"
 
     # ── OpenAI / LLM ───────────────────────────────────────────────
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
     openai_temperature: float = 0.3
+    openai_base_url: str = ""        # URL base alternativa (p.ej. proxy corporativo)
     # Embeddings para RAG (usado por Qdrant)
     openai_embedding_model: str = "text-embedding-3-small"
 
@@ -64,6 +71,8 @@ class Settings(BaseSettings):
         # Busca .env en la raíz del proyecto; si no existe, busca en backend/
         env_file = (str(_ROOT / ".env"), ".env")
         env_file_encoding = "utf-8"
+        # Ignorar variables de entorno no declaradas en el modelo
+        extra = "ignore"
 
 
 @lru_cache

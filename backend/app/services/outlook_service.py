@@ -1,6 +1,10 @@
 """
 Servicio de integración con Microsoft Graph API (Outlook / Teams).
 Gestiona eventos del calendario del usuario.
+
+Estrategia de autenticación (por orden de prioridad):
+  1. Token OAuth del usuario (flujo Authorization Code) — oauth_service
+  2. Fallback: Client Credentials app-only (ms_client_id + ms_client_secret)
 """
 from typing import Optional
 from datetime import date, datetime, timedelta
@@ -11,9 +15,6 @@ from app.models.event import Event, EventCreate, EventUpdate, EventType
 
 settings = get_settings()
 
-# Cache simple del token de acceso
-_token_cache: dict = {}
-
 
 def _looks_like_uuid(value: str) -> bool:
     """Detecta si un valor parece un UUID (Secret ID en lugar de Secret Value)."""
@@ -22,11 +23,34 @@ def _looks_like_uuid(value: str) -> bool:
 
 
 def _get_access_token() -> str:
-    """Obtiene un token de acceso para Microsoft Graph usando MSAL."""
+    """
+    Obtiene un token de acceso para Microsoft Graph.
+    Prioridad:
+      1. Token OAuth del usuario (oauth_service) si está disponible.
+      2. Client Credentials (app-only) como fallback.
+    """
+    import re
+
+    # 1. Intentar token OAuth del usuario
+    try:
+        from app.services import oauth_service
+        oauth_token = oauth_service.get_valid_token()
+        if oauth_token:
+            return oauth_token
+    except Exception:
+        pass  # Si oauth_service falla, continuar con client credentials
+
+    # 2. Fallback: Client Credentials
     import msal
 
+    if not settings.ms_client_id or not settings.ms_tenant_id:
+        raise RuntimeError("No hay token OAuth activo ni credenciales de aplicación configuradas.")
+
     # Validación preventiva: el Secret Value nunca es un UUID puro
-    if _looks_like_uuid(settings.ms_client_secret):
+    if settings.ms_client_secret and bool(re.fullmatch(
+        r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+        settings.ms_client_secret, re.I
+    )):
         raise RuntimeError(
             "MS_CLIENT_SECRET parece un Secret ID (UUID), no un Secret Value. "
             "En Azure Portal → App Registrations → Certificates & Secrets, "
@@ -48,7 +72,6 @@ def _get_access_token() -> str:
         )
     if "access_token" not in result:
         error_desc = result.get("error_description", "Sin descripción de error")
-        # Error específico: Secret ID en lugar de Secret Value
         if "AADSTS7000215" in error_desc:
             raise RuntimeError(
                 "AADSTS7000215 – MS_CLIENT_SECRET contiene el Secret ID, no el Secret Value. "
@@ -57,6 +80,21 @@ def _get_access_token() -> str:
             )
         raise RuntimeError(f"Error obteniendo token MS Graph: {error_desc}")
     return result["access_token"]
+
+
+def _get_user_email() -> str:
+    """
+    Devuelve el email del usuario para las llamadas a Graph API.
+    Si hay token OAuth activo, usa el email del token; si no, usa ms_user_email del .env.
+    """
+    try:
+        from app.services import oauth_service
+        status = oauth_service.get_connection_status()
+        if status.get("connected") and status.get("user_email"):
+            return status["user_email"]
+    except Exception:
+        pass
+    return settings.ms_user_email
 
 
 def _graph_headers() -> dict:
@@ -157,7 +195,10 @@ async def get_events(
     import logging
     logger = logging.getLogger(__name__)
 
-    if not settings.ms_client_id or not settings.ms_tenant_id:
+    # Permitir acceso si hay token OAuth activo, aunque ms_client_id no esté en .env
+    from app.services import oauth_service as _oauth
+    has_oauth = bool(_oauth.get_valid_token())
+    if not has_oauth and (not settings.ms_client_id or not settings.ms_tenant_id):
         return _mock_events()
 
     import httpx
@@ -178,8 +219,13 @@ async def get_events(
     ref = date.fromisoformat(date_ref) if date_ref else date.today()
     start, end = _date_range(period, ref)
 
+    user_email = _get_user_email()
+    if not user_email:
+        logger.warning("No hay email de usuario configurado para Graph API.")
+        return _mock_events()
+
     url = (
-        f"https://graph.microsoft.com/v1.0/users/{settings.ms_user_email}"
+        f"https://graph.microsoft.com/v1.0/users/{user_email}"
         f"/calendarView"
         f"?startDateTime={start.isoformat()}Z"
         f"&endDateTime={end.isoformat()}Z"
@@ -228,14 +274,13 @@ async def create_event(data: EventCreate) -> Event:
     import traceback
     logger = logging.getLogger(__name__)
 
-    # Si no hay credenciales completas, devolver evento local (sin Outlook)
-    if not settings.ms_client_id or not settings.ms_tenant_id or not settings.ms_user_email:
+    # Si no hay credenciales completas ni token OAuth, devolver evento local
+    from app.services import oauth_service as _oauth
+    has_oauth = bool(_oauth.get_valid_token())
+    user_email = _get_user_email()
+    if not has_oauth and (not settings.ms_client_id or not settings.ms_tenant_id or not user_email):
         logger.warning(
-            "create_event: credenciales incompletas → ms_client_id=%s, ms_tenant_id=%s, ms_user_email=%s. "
-            "El evento se crea solo en local.",
-            "OK" if settings.ms_client_id else "VACÍO",
-            "OK" if settings.ms_tenant_id else "VACÍO",
-            "OK" if settings.ms_user_email else "VACÍO",
+            "create_event: credenciales incompletas y sin token OAuth. El evento se crea solo en local."
         )
         return Event(id=str(uuid.uuid4()), **data.model_dump())
 
@@ -280,10 +325,10 @@ async def create_event(data: EventCreate) -> Event:
 
     logger.info(
         "create_event: POST Graph API → subject=%r start=%s user=%s",
-        data.title, start_iso, settings.ms_user_email,
+        data.title, start_iso, user_email,
     )
 
-    url = f"https://graph.microsoft.com/v1.0/users/{settings.ms_user_email}/events"
+    url = f"https://graph.microsoft.com/v1.0/users/{user_email}/events"
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(url, json=body, headers=headers)
@@ -320,7 +365,7 @@ async def update_event(event_id: str, data: EventUpdate) -> Event:
     if data.date and data.time:
         body["start"] = {"dateTime": f"{data.date}T{data.time}:00", "timeZone": "Europe/Madrid"}
 
-    url = f"https://graph.microsoft.com/v1.0/users/{settings.ms_user_email}/events/{event_id}"
+    url = f"https://graph.microsoft.com/v1.0/users/{_get_user_email()}/events/{event_id}"
     async with httpx.AsyncClient() as client:
         resp = await client.patch(url, json=body, headers=_graph_headers())
         resp.raise_for_status()
@@ -334,7 +379,7 @@ async def delete_event(event_id: str) -> None:
 
     import httpx
 
-    url = f"https://graph.microsoft.com/v1.0/users/{settings.ms_user_email}/events/{event_id}"
+    url = f"https://graph.microsoft.com/v1.0/users/{_get_user_email()}/events/{event_id}"
     async with httpx.AsyncClient() as client:
         resp = await client.delete(url, headers=_graph_headers())
         resp.raise_for_status()
