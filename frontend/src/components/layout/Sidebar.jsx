@@ -47,6 +47,7 @@ export default function Sidebar({ view, onNavigate, agentStatus = "active" }) {
         {[
           { label: "Outlook", color: COLORS.blue },
           { label: "Notion",  color: COLORS.accent },
+          { label: "Jira",    color: COLORS.amber },
         ].map((c) => (
           <div
             key={c.label}

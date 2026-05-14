@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Brain, Clock, ArrowRight } from "lucide-react";
 import { COLORS, priorityConfig } from "../../constants/colors.js";
 import { s } from "../../constants/styles.js";
@@ -24,12 +24,23 @@ export default function PriorityView({ tasks = [], events = [] }) {
     fetchScheduleSuggestion({ tasks: pendingTasks, events, date: new Date().toISOString() });
   };
 
+  // Fire immediately on mount so the spinner shows right away.
+  // The orchestrator will try Notion/Outlook on its own.
   useEffect(() => {
-    if (pendingTasks.length > 0 || events.length > 0) {
+    regenerate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Re-fire once when tasks/events first arrive from the API so the
+  // orchestrator fallback receives the actual data.
+  const dataTriggered = useRef(false);
+  useEffect(() => {
+    if (!dataTriggered.current && (pendingTasks.length > 0 || events.length > 0)) {
+      dataTriggered.current = true;
       regenerate();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [tasks, events]);
 
   return (
     <div>

@@ -192,11 +192,21 @@ async def get_tasks(
 
     filters: list[dict] = []
 
-    # Filtro de fecha solo si existe la propiedad
+    # Filtro de fecha solo si existe la propiedad.
+    # Incluye tareas con fecha en el rango O sin fecha asignada.
     date_prop = next((p for p in ["Fecha", "Deadline", "Due"] if p in db_props), None)
     if date_prop:
-        filters.append({"property": date_prop, "date": {"on_or_after": start.isoformat()}})
-        filters.append({"property": date_prop, "date": {"on_or_before": end.isoformat()}})
+        filters.append({
+            "or": [
+                {
+                    "and": [
+                        {"property": date_prop, "date": {"on_or_after": start.isoformat()}},
+                        {"property": date_prop, "date": {"on_or_before": end.isoformat()}},
+                    ]
+                },
+                {"property": date_prop, "date": {"is_empty": True}},
+            ]
+        })
 
     # Filtro de prioridad solo si existe
     if priority:
