@@ -9,120 +9,100 @@ Esta documentación explica paso a paso el código en la carpeta `backend` y ayu
 El backend está organizado con **FastAPI** y una estructura modular:
 - `main.py` → punto de entrada, inicializa la app y registra middleware y routers.
 - `app/config.py` → configuración de la aplicación mediante variables de entorno.
-- `app/models` → definiciones de modelos de datos con **Pydantic**.
-- `app/routers` → rutas agrupadas por dominio (Tareas, Calendario, Agente IA).
-- `app/services` → lógica de negocio, comunicación con APIs externas (Notion, Outlook, OpenAI, Jira).
+- `app/models` → definiciones de modelos de datos con **Pydantic** y adaptaciones ORM.
+- `app/routers` → rutas agrupadas por dominio (Tareas, Calendario, Agente IA, Jira).
+- `app/services` → lógica de negocio, comunicación con APIs externas (Notion, Outlook, OpenAI, Jira, BBDD).
 - `logging_config.py` → configuración central de logs.
 - `docs/db_schema.md` → esquema de la base de datos.
+- `mcp/` → integración MCP para creación de tareas Jira.
 
 ---
 
 ## 2. main.py
-- Crea una instancia de `FastAPI` con título, versión y rutas de documentación `/api/docs`.
+- Crea instancia de `FastAPI` con título, versión y rutas de documentación.
 - Añade middleware CORS configurable.
-- Incluye routers (`tasks`, `calendar`, `agent`, otros nuevos como Jira si aplica) con prefijo común `settings.api_prefix`.
-- Define endpoint `/api/health` para verificar estado.
-- **Nueva integración BBDD**: Inicializa conexión global a la base de datos y sesión antes de incluir routers.
-
-**Posible integración MCP**: Se podría añadir un router o endpoint específico para herramientas MCP.
+- Incluye routers (`tasks`, `calendar`, `agent`, `jira`) con prefijo común `settings.api_prefix`.
+- Endpoint `/api/health` para verificar estado.
+- Inicializa conexión global a la base de datos y sesión antes de incluir routers.
+  
+**Integración MCP**: Puede añadirse un router MCP para exponer herramientas a través de la API.
 
 ---
 
 ## 3. config.py
-- Usa `BaseSettings` (pydantic_settings) para cargar configuración desde `.env`.
-- Variables para Notion, Microsoft Graph, OpenAI, Jira, CORS, nombre de aplicación y ahora credenciales de base de datos (host, puerto, usuario, contraseña, nombre).
-- `get_settings()` con **lru_cache** para que sea singleton.
-
-**Punto clave MCP**: Añadir configuración de endpoints MCP y tokens.
+- Usa `BaseSettings` para cargar configuración desde `.env`.
+- Variables para Notion, Microsoft Graph, OpenAI, Jira, CORS, nombre de app y credenciales de BBDD.
+- `get_settings()` usa `lru_cache` para mantener una sola instancia.
+- Credenciales MCP y configuración de entornos pueden añadirse aquí.
 
 ---
 
 ## 4. app/models
-
 ### agent.py
-- Modelos para interacción con el agente IA (`ChatMessage`, `ChatRequest`, `ChatResponse`).
-- Entidades para prioridades y calendario.
+Modelos para interacción IA (`ChatMessage`, `ChatRequest`, `ChatResponse`).
 
 ### event.py
-- Enum `EventType` y modelos para eventos calendario.
+Enum `EventType`, modelos para eventos calendario.
 
 ### task.py
-- Enums `Priority`, `Period` y modelos para tareas.
-- Integración con BBDD: adaptados para ORM (SQLAlchemy) manteniendo validación Pydantic.
+Enums `Priority`, `Period`; integración ORM para persistencia.
 
-**Posible integración MCP**: Añadir modelos específicos para datos recibidos o enviados a MCP.
+**Integración MCP**: Modelos para datos a enviar/recibir de un servidor MCP.
 
 ---
 
 ## 5. app/routers
-
 ### agent.py
-- Endpoints para chat IA, prioridades, horarios, historial y limpieza de historial.
-- Usa servicios del agente IA.
+Endpoints IA para chat, prioridades, horario e historial.
 
 ### calendar.py
-- Endpoints CRUD para eventos calendario y sincronización.
-- Usa `outlook_service`.
+Endpoints CRUD y sincronización, usa `outlook_service`.
 
 ### tasks.py
-- Endpoints CRUD para tareas, sincronización y comentarios.
-- Usa `notion_service` y ahora también interacción con la base de datos.
+CRUD de tareas, sincronización y comentarios, usa `notion_service` y BBDD.
 
-### jira_service.py (en routers o servicios)
-- Endpoints para integrar y sincronizar tareas/eventos con Jira.
-- Usa `jira_service` para la lógica.
-
-**Posible integración MCP**: Añadir endpoints que interactúen con MCP.
+### jira.py
+Endpoints CRUD de tareas en Jira, sincronización con BBDD.
 
 ---
 
 ## 6. app/services
-
 ### ai_agent_service.py
-- Conecta con OpenAI (`_get_openai_client`).
-- Funciones para chat, prioridades, horario, historial.
-- Mock para pruebas.
+Conecta con OpenAI, funciones para chat y prioridades.
 
 ### notion_service.py
-- Conexión cliente Notion.
-- CRUD de tareas.
-- Mock para pruebas.
+Conexión al cliente Notion, CRUD de tareas.
 
 ### outlook_service.py
-- Conexión Microsoft Graph.
-- CRUD de eventos.
-- Mock para pruebas.
+Conexión Microsoft Graph, CRUD de eventos.
 
 ### jira_service.py
-- Conexión cliente Jira usando API REST.
-- CRUD de incidencias/tareas.
-- Sincronización con BBDD.
-
-**Integración BBDD**: Servicios consultan y actualizan información en la base de datos.
-
-**Posible integración MCP**: Añadir servicio que llame a MCP y procese resultados.
+Conexión Jira REST API, CRUD y sincronización con BBDD.
 
 ---
 
 ## 7. logging_config.py
-- Establece formato y nivel de logs para toda la aplicación.
-- Útil para depuración e integración de MCP (monitorizar requests/responses).
+Formato y nivel de logs globales; clave para monitoreo e integración MCP.
 
 ---
 
 ## 8. docs/db_schema.md
-- Describe las tablas, campos y relaciones de la base de datos.
-- Documentación clave para adaptar servicios y routers a persistencia.
+Esquema de BBDD con tablas, campos y relaciones.
 
 ---
 
-## 9. Comentarios sugeridos en el código
-En puntos clave (conexiones externas, estructuras de datos, configuración), añadir comentarios para indicar dónde se integrará MCP y cómo interactúa con la base de datos.
+## 9. mcp/jira_task_server
+Servidor MCP que expone herramienta `create_jira_task` usando `jira_service` con credenciales proporcionadas.
 
 ---
 
-## 10. Próximos pasos
-1. Revisar y comentar la inicialización de la BBDD en `main.py`.
-2. Documentar dependencias e interacciones entre servicios y la base de datos.
-3. Diseñar endpoints MCP y definir modelos asociados.
-4. Actualizar esta documentación conforme se implementen cambios.
+## 10. Comentarios sugeridos
+Añadir comentarios en código para indicar puntos de interacción MCP y conexión BBDD.
+
+---
+
+## 11. Próximos pasos
+1. Documentar detalladamente `mcp/jira_task_server`.
+2. Ampliar descripción de integración BBDD.
+3. Definir endpoints MCP futuros.
+4. Mantener documentación sincronizada con cambios.
