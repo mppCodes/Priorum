@@ -14,6 +14,19 @@ const HOUR_HEIGHT = 64;  // px por hora
 const LABEL_WIDTH = 56;  // px para la columna de horas
 const HOURS = Array.from({ length: LAST_HOUR - FIRST_HOUR }, (_, i) => FIRST_HOUR + i);
 
+/** Extrae "HH:MM" de un ISO datetime string */
+const getTime = (isoStr) => {
+  if (!isoStr) return "";
+  const d = new Date(isoStr);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+
+/** Calcula duración en minutos entre dos ISO datetime strings */
+const getDuration = (startStr, endStr) => {
+  if (!startStr || !endStr) return 30;
+  return Math.round((new Date(endStr) - new Date(startStr)) / 60000);
+};
+
 /** Convierte "HH:MM" a minutos desde medianoche */
 const toMinutes = (time) => {
   if (!time) return 0;
@@ -21,24 +34,16 @@ const toMinutes = (time) => {
   return h * 60 + m;
 };
 
-/** Calcula la hora de fin "HH:MM" a partir de inicio + duración en minutos */
-const endTime = (startTime, duration) => {
-  if (!startTime) return "";
-  const total = toMinutes(startTime) + (duration || 0);
-  const h = Math.floor(total / 60) % 24;
-  const m = total % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-};
-
 /** Posición top en px de un evento dentro del grid */
 const eventTop = (ev) => {
-  const mins = toMinutes(ev.time) - FIRST_HOUR * 60;
+  const mins = toMinutes(getTime(ev.start)) - FIRST_HOUR * 60;
   return Math.max(0, (mins / 60) * HOUR_HEIGHT);
 };
 
 /** Altura en px de un evento según su duración */
 const eventHeight = (ev) => {
-  const h = ((ev.duration || 30) / 60) * HOUR_HEIGHT;
+  const dur = getDuration(ev.start, ev.end);
+  const h = (dur / 60) * HOUR_HEIGHT;
   return Math.max(h, 24); // mínimo 24px para que sea legible
 };
 
@@ -225,18 +230,22 @@ export default function CalendarView() {
               {/* Eventos posicionados absolutamente */}
               {events
                 .filter((ev) => {
-                  if (!ev.time) return false;
-                  const h = parseInt(ev.time.split(":")[0]);
+                  const time = getTime(ev.start);
+                  if (!time) return false;
+                  const h = parseInt(time.split(":")[0]);
                   return h >= FIRST_HOUR && h < LAST_HOUR;
                 })
                 .map((ev) => {
-                  const color = eventTypeConfig[ev.type]?.color || COLORS.accent;
+                  const evType = ev.type || "other";
+                  const color = eventTypeConfig[evType]?.color || COLORS.accent;
                   const top    = eventTop(ev);
                   const height = eventHeight(ev);
-                  const end    = endTime(ev.time, ev.duration);
-                  const durationLabel = ev.duration >= 60
-                    ? `${Math.floor(ev.duration / 60)}h${ev.duration % 60 ? ` ${ev.duration % 60}min` : ""}`
-                    : `${ev.duration}min`;
+                  const startTime = getTime(ev.start);
+                  const endTimeStr = getTime(ev.end);
+                  const duration = getDuration(ev.start, ev.end);
+                  const durationLabel = duration >= 60
+                    ? `${Math.floor(duration / 60)}h${duration % 60 ? ` ${duration % 60}min` : ""}`
+                    : `${duration}min`;
 
                   return (
                     <div
@@ -275,7 +284,7 @@ export default function CalendarView() {
                           {ev.title}
                         </div>
                         <span style={{ ...s.tag(color), flexShrink: 0 }}>
-                          {eventTypeConfig[ev.type]?.label || ev.type}
+                          {eventTypeConfig[evType]?.label || evType}
                         </span>
                       </div>
 
@@ -292,12 +301,12 @@ export default function CalendarView() {
                         >
                           <span>
                             <Clock size={9} style={{ verticalAlign: "middle" }} />{" "}
-                            {ev.time} → {end} · {durationLabel}
+                            {startTime} → {endTimeStr} · {durationLabel}
                           </span>
                           {ev.attendees?.length > 0 && (
                             <span>
                               <User size={9} style={{ verticalAlign: "middle" }} />{" "}
-                              {ev.attendees.join(", ")}
+                              {ev.attendees.map(a => typeof a === "string" ? a : (a.name || a.email)).join(", ")}
                             </span>
                           )}
                         </div>

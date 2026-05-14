@@ -3,11 +3,14 @@ import { X, Plus } from "lucide-react";
 import { COLORS, priorityConfig } from "../../constants/colors.js";
 import { s } from "../../constants/styles.js";
 
+/** Fecha de hoy en formato YYYY-MM-DD */
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
 const EMPTY_FORM = {
   title: "",
   project: "",
   priority: "media",
-  deadline: "",
+  deadline: todayISO(),
   tags: "",
 };
 
@@ -83,12 +86,11 @@ export default function AddTaskModal({ onClose, onSubmit }) {
           </button>
         </div>
 
-        {/* Campos */}
+        {/* Campos de texto */}
         {[
-          { key: "title",    label: "Título",    placeholder: "¿Qué hay que hacer?" },
-          { key: "project",  label: "Proyecto",  placeholder: "Backend API, Frontend…" },
-          { key: "deadline", label: "Deadline",  placeholder: "Hoy, Mañana, Vie 16…" },
-          { key: "tags",     label: "Etiquetas", placeholder: "code, docs, cliente…" },
+          { key: "title",   label: "Título",    placeholder: "¿Qué hay que hacer?" },
+          { key: "project", label: "Proyecto",  placeholder: "Backend API, Frontend…" },
+          { key: "tags",    label: "Etiquetas", placeholder: "code, docs, cliente…" },
         ].map((f) => (
           <div key={f.key} style={{ marginBottom: 12 }}>
             <label style={s.label}>{f.label}</label>
@@ -101,6 +103,18 @@ export default function AddTaskModal({ onClose, onSubmit }) {
             />
           </div>
         ))}
+
+        {/* Deadline – selector de fecha */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={s.label}>Deadline</label>
+          <input
+            type="date"
+            value={form.deadline}
+            onChange={(e) => set("deadline", e.target.value)}
+            style={{ ...s.input, colorScheme: "dark", cursor: "pointer" }}
+            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+          />
+        </div>
 
         {/* Prioridad */}
         <div style={{ marginBottom: 16 }}>

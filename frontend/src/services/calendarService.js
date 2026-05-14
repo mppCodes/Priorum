@@ -8,9 +8,26 @@ export const getEvents = (params = {}) => api.get("/calendar", { params });
 
 /**
  * Crea un nuevo evento en Outlook.
+ * Transforms form fields (date, time, duration) into start/end ISO datetimes.
  * @param {Object} data - { title, date, time, duration, type, notes, attendees }
  */
-export const createEvent = (data) => api.post("/calendar", data);
+export const createEvent = (data) => {
+  // Transform form data to match EventCreate schema (start/end datetimes)
+  if (data.date && data.time && !data.start) {
+    const startDt = new Date(`${data.date}T${data.time}:00`);
+    const endDt = new Date(startDt.getTime() + (data.duration || 30) * 60000);
+    const payload = {
+      title: data.title,
+      start: startDt.toISOString(),
+      end: endDt.toISOString(),
+      description: data.notes || "",
+      type: data.type || null,
+      attendees: data.attendees || [],
+    };
+    return api.post("/calendar", payload);
+  }
+  return api.post("/calendar", data);
+};
 
 /**
  * Actualiza un evento existente.
