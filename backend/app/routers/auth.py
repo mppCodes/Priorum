@@ -27,14 +27,33 @@ async def outlook_login():
     """
     try:
         auth_url = oauth_service.get_auth_url()
-        return {"auth_url": auth_url}
+        # Incluir redirect_uri para facilitar diagnóstico de configuración en Azure
+        return {
+            "auth_url": auth_url,
+            "redirect_uri": settings.ms_redirect_uri,
+        }
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
 
 
+@router.get("/outlook/debug")
+async def outlook_debug():
+    """
+    Diagnóstico: muestra la configuración OAuth activa (sin secretos).
+    Útil para verificar que el redirect_uri coincide con el registrado en Azure Portal.
+    """
+    return {
+        "ms_client_id": settings.ms_client_id[:8] + "..." if settings.ms_client_id else "(vacío)",
+        "ms_tenant_id": settings.ms_tenant_id[:8] + "..." if settings.ms_tenant_id else "(vacío)",
+        "ms_redirect_uri": settings.ms_redirect_uri,
+        "ms_scopes": settings.ms_scopes,
+        "frontend_url": settings.frontend_url,
+    }
+
+
 @router.get("/outlook/callback")
 async def outlook_callback(
-    code: str = Query(..., description="Código de autorización devuelto por Microsoft"),
+    code: str = Query(None, description="Código de autorización devuelto por Microsoft"),
     error: str = Query(None, description="Error devuelto por Microsoft"),
     error_description: str = Query(None, description="Descripción del error"),
 ):
@@ -47,6 +66,12 @@ async def outlook_callback(
         logger.error("Error en callback OAuth: %s – %s", error, error_description)
         return RedirectResponse(
             url=f"{settings.frontend_url}/settings?outlook=error&reason={error}"
+        )
+
+    if not code:
+        logger.error("Callback OAuth sin código ni error.")
+        return RedirectResponse(
+            url=f"{settings.frontend_url}/settings?outlook=error&reason=missing_code"
         )
 
     try:
