@@ -95,33 +95,39 @@ def _parse_graph_event(ev: dict) -> Event:
     else:
         ev_type = EventType.reunion
 
+    from app.models.event import Attendee
     attendees = [
-        (a.get("emailAddress") or {}).get("name", "")
+        Attendee(
+            email=(a.get("emailAddress") or {}).get("address", ""),
+            name=(a.get("emailAddress") or {}).get("name", ""),
+        )
         for a in (ev.get("attendees") or [])
         if (a.get("emailAddress") or {}).get("name")
     ]
 
-    time_str = ""
-    date_str = ""
+    # Parse start/end datetimes
+    start_parsed = datetime.now()
+    end_parsed = datetime.now()
     if start_dt:
         try:
-            dt = datetime.fromisoformat(start_dt.replace("Z", "+00:00"))
-            time_str = dt.strftime("%H:%M")
-            date_str = dt.strftime("%Y-%m-%d")
+            start_parsed = datetime.fromisoformat(start_dt.replace("Z", "+00:00"))
+        except Exception:
+            pass
+    if end_dt:
+        try:
+            end_parsed = datetime.fromisoformat(end_dt.replace("Z", "+00:00"))
         except Exception:
             pass
 
     return Event(
         id=ev.get("id", str(uuid.uuid4())),
-        outlook_id=ev.get("id"),
+        external_id=ev.get("id"),
         title=ev.get("subject", "Sin título"),
-        date=date_str,
-        time=time_str,
-        duration=duration,
-        type=ev_type,
-        notes=ev.get("bodyPreview", ""),
+        start=start_parsed,
+        end=end_parsed,
+        description=ev.get("bodyPreview", ""),
         attendees=attendees,
-        teams_url=(ev.get("onlineMeeting") or {}).get("joinUrl"),
+        source="outlook",
     )
 
 
@@ -253,25 +259,25 @@ async def create_event(data: EventCreate) -> Event:
         )
         raise RuntimeError(f"No se pudo autenticar con Outlook: {exc}") from exc
 
-    start_iso = f"{data.date}T{data.time}:00"
-    end_dt    = datetime.fromisoformat(start_iso) + timedelta(minutes=data.duration)
+    start_iso = data.start.isoformat()
+    end_iso = data.end.isoformat()
 
     # Mapear el tipo de evento a categorías de Outlook
-    # _parse_graph_event usa estas categorías para determinar el tipo al leer
     _type_to_category: dict[str, list[str]] = {
         "personal": ["Personal"],
         "bloqueo":  ["Bloqueo"],
         "reunion":  [],
     }
-    categories = _type_to_category.get(str(data.type.value if hasattr(data.type, "value") else data.type), [])
+    ev_type = str(data.type.value if data.type and hasattr(data.type, "value") else (data.type or ""))
+    categories = _type_to_category.get(ev_type, [])
 
     body: dict = {
         "subject": data.title,
         "start":   {"dateTime": start_iso, "timeZone": "Europe/Madrid"},
-        "end":     {"dateTime": end_dt.isoformat(), "timeZone": "Europe/Madrid"},
-        "body":    {"contentType": "text", "content": data.notes or ""},
+        "end":     {"dateTime": end_iso, "timeZone": "Europe/Madrid"},
+        "body":    {"contentType": "text", "content": data.description or ""},
         "attendees": [
-            {"emailAddress": {"address": a}, "type": "required"}
+            {"emailAddress": {"address": a.email}, "type": "required"}
             for a in (data.attendees or [])
         ],
     }
@@ -315,10 +321,12 @@ async def update_event(event_id: str, data: EventUpdate) -> Event:
     import httpx
 
     body: dict = {}
-    if data.title    is not None: body["subject"] = data.title
-    if data.notes    is not None: body["body"] = {"contentType": "text", "content": data.notes}
-    if data.date and data.time:
-        body["start"] = {"dateTime": f"{data.date}T{data.time}:00", "timeZone": "Europe/Madrid"}
+    if data.title       is not None: body["subject"] = data.title
+    if data.description is not None: body["body"] = {"contentType": "text", "content": data.description}
+    if data.start is not None:
+        body["start"] = {"dateTime": data.start.isoformat(), "timeZone": "Europe/Madrid"}
+    if data.end is not None:
+        body["end"] = {"dateTime": data.end.isoformat(), "timeZone": "Europe/Madrid"}
 
     url = f"https://graph.microsoft.com/v1.0/users/{settings.ms_user_email}/events/{event_id}"
     async with httpx.AsyncClient() as client:
@@ -342,14 +350,31 @@ async def delete_event(event_id: str) -> None:
 
 def _mock_events() -> list[Event]:
     """Datos de ejemplo cuando Outlook no está configurado."""
-    today = date.today().isoformat()
+    from app.models.event import Attendee
+    today = date.today()
     return [
-        Event(id="e1", title="Daily standup",    date=today, time="09:00", duration=15,
-              type=EventType.reunion,  attendees=["Ana", "Paco", "Marta"]),
-        Event(id="e2", title="Revisión sprint",  date=today, time="11:00", duration=60,
-              type=EventType.reunion,  attendees=["Todo el equipo"]),
-        Event(id="e3", title="Cita médica",      date=today, time="13:30", duration=30,
-              type=EventType.personal, attendees=[]),
-        Event(id="e4", title="1:1 con producto", date=today, time="16:00", duration=30,
-              type=EventType.reunion,  attendees=["Laura"]),
+        Event(
+            id="e1", title="Daily standup",
+            start=datetime(today.year, today.month, today.day, 9, 0),
+            end=datetime(today.year, today.month, today.day, 9, 15),
+            attendees=[Attendee(email="ana@example.com", name="Ana"), Attendee(email="paco@example.com", name="Paco"), Attendee(email="marta@example.com", name="Marta")],
+        ),
+        Event(
+            id="e2", title="Revisión sprint",
+            start=datetime(today.year, today.month, today.day, 11, 0),
+            end=datetime(today.year, today.month, today.day, 12, 0),
+            attendees=[Attendee(email="equipo@example.com", name="Todo el equipo")],
+        ),
+        Event(
+            id="e3", title="Cita médica",
+            start=datetime(today.year, today.month, today.day, 13, 30),
+            end=datetime(today.year, today.month, today.day, 14, 0),
+            attendees=[],
+        ),
+        Event(
+            id="e4", title="1:1 con producto",
+            start=datetime(today.year, today.month, today.day, 16, 0),
+            end=datetime(today.year, today.month, today.day, 16, 30),
+            attendees=[Attendee(email="laura@example.com", name="Laura")],
+        ),
     ]

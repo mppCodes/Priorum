@@ -32,7 +32,8 @@ export function useCalendar(initialFilters = { period: "day" }) {
   const addEvent = async (eventData) => {
     try {
       const newEvent = await createEvent(eventData);
-      setEvents((prev) => [...prev, newEvent].sort((a, b) => a.time.localeCompare(b.time)));
+      // Refresh from backend to ensure consistent data
+      await fetchEvents();
       return newEvent;
     } catch (err) {
       setError(err.message);
@@ -79,18 +80,23 @@ export function useCalendar(initialFilters = { period: "day" }) {
 
   // Calcula slots libres entre eventos del día
   const getFreeSlots = () => {
+    const toTime = (isoStr) => {
+      if (!isoStr) return "";
+      const d = new Date(isoStr);
+      return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    };
     const dayEvents = events
-      .filter((e) => e.time)
-      .sort((a, b) => a.time.localeCompare(b.time));
+      .filter((e) => e.start)
+      .sort((a, b) => (a.start || "").localeCompare(b.start || ""));
 
     const slots = [];
     let cursor = "08:00";
 
     for (const ev of dayEvents) {
-      if (ev.time > cursor) slots.push({ from: cursor, to: ev.time });
-      const [h, m] = ev.time.split(":").map(Number);
-      const endMin = h * 60 + m + (ev.duration || 30);
-      cursor = `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`;
+      const evStart = toTime(ev.start);
+      const evEnd = toTime(ev.end);
+      if (evStart > cursor) slots.push({ from: cursor, to: evStart });
+      cursor = evEnd || cursor;
     }
     if (cursor < "18:00") slots.push({ from: cursor, to: "18:00" });
     return slots;
