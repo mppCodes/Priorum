@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
     # Re-aplicar tras el arranque de uvicorn (que añade sus propios handlers)
     setup_logging()
     # Inicializa MongoDB (índices incluidos)
-    await init_db()
+    # await init_db()
     logger.info("Jira MCP server mounted at /mcp")
     # Run the MCP app's lifespan so its internal task group is initialized
     async with _mcp_app.lifespan(_mcp_app):
