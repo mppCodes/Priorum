@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.services.mongo import init_db
+from app.services.mongo import init_db, close_db  # importa close_db para el shutdown
 
 # Importa los routers como objetos APIRouter
 from app.routers.tasks import router as tasks_router
@@ -34,7 +34,18 @@ app.add_middleware(
 # Startup: inicializa MongoDB (índices incluidos)
 @app.on_event("startup")
 async def startup() -> None:
+    # init_db es asíncrona: usar 'await'
     await init_db()
+    # Si quieres validar la conexión al arrancar, descomenta:
+    # from app.services.mongo import get_db
+    # db = await get_db()
+    # await db.command("ping")
+
+# Shutdown: cierra la conexión a MongoDB
+@app.on_event("shutdown")
+async def shutdown() -> None:
+    # close_db es síncrona: NO usar 'await'
+    close_db()
 
 # Routers
 app.include_router(tasks_router,    prefix=settings.api_prefix)

@@ -3,7 +3,7 @@ Servicio del agente IA.
 Usa OpenAI (GPT-4o) para priorizar tareas, sugerir horarios y responder preguntas.
 """
 from typing import Any
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 
 from app.config import get_settings
@@ -39,18 +39,18 @@ Contexto:
 {context}
 
 Devuelve ÚNICAMENTE un JSON válido con este formato exacto:
-{{
+{
   "priorities": [
-    {{
+    {
       "rank": 1,
       "title": "título de la tarea",
       "why": "razón breve de por qué es prioritaria (1-2 frases)",
       "time": "tiempo estimado (ej: 45 min)",
       "tag": "alta|media|baja"
-    }}
+    }
   ],
   "reasoning": "explicación general de la distribución del día (2-3 frases)"
-}}
+}
 
 Ordena por urgencia + impacto. Máximo 5 tareas.
 """
@@ -61,17 +61,17 @@ Contexto:
 {context}
 
 Devuelve ÚNICAMENTE un JSON válido con este formato:
-{{
+{
   "schedule": [
-    {{
+    {
       "time": "HH:MM",
       "task": "título de la tarea o actividad",
       "duration": 45,
       "type": "task|break|event"
-    }}
+    }
   ],
   "reasoning": "explicación de la distribución propuesta (2-3 frases)"
-}}
+}
 """
 
 
@@ -108,7 +108,7 @@ def _build_context(data: dict[str, Any]) -> str:
         for slot in free_slots:
             lines.append(f"  - {slot.get('from', '?')} – {slot.get('to', '?')}")
 
-    date_str = data.get("date", datetime.now().isoformat())
+    date_str = data.get("date", datetime.now(timezone.utc).isoformat())
     lines.insert(0, f"FECHA: {date_str[:10]}\n")
 
     return "\n".join(lines)
@@ -146,7 +146,7 @@ async def chat(message: str, context: dict[str, Any]) -> ChatResponse:
     reply = response.choices[0].message.content or ""
 
     # Guarda en historial
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     _chat_history.append(ChatMessage(role="user",  content=message, timestamp=now))
     _chat_history.append(ChatMessage(role="agent", content=reply,   timestamp=now))
 
@@ -234,7 +234,7 @@ def _mock_chat(message: str) -> ChatResponse:
         "Para activar el agente IA, configura OPENAI_API_KEY en el archivo .env. "
         f'Recibí tu mensaje: "{message}"'
     )
-    now = datetime.now(datetime.timezone.utc)
+    now = datetime.now(timezone.utc)
     _chat_history.append(ChatMessage(role="user",  content=message, timestamp=now))
     _chat_history.append(ChatMessage(role="agent", content=reply,   timestamp=now))
     return ChatResponse(message=reply, timestamp=now)
