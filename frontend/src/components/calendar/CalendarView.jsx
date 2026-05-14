@@ -44,11 +44,14 @@ const eventHeight = (ev) => {
 
 // ── Componente ────────────────────────────────────────────────────────────────
 
-export default function CalendarView() {
+export default function CalendarView({ onNavigate }) {
   const { events, filters, loading, error, syncing, addEvent, sync, updateFilters } =
     useCalendar({ period: "day" });
 
   const [showAdd, setShowAdd] = useState(false);
+
+  // Detectar si se están mostrando datos de ejemplo (mock)
+  const isMock = events.length > 0 && events.every((e) => e.source === "mock");
 
   const today = new Date().toLocaleDateString("es-ES", {
     weekday: "long",
@@ -135,6 +138,47 @@ export default function CalendarView() {
           </div>
         ))}
       </div>
+
+      {/* Banner de datos de ejemplo */}
+      {isMock && !loading && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            background: `${COLORS.amber}15`,
+            border: `1px solid ${COLORS.amber}40`,
+            borderRadius: 6,
+            padding: "10px 14px",
+            fontSize: 12,
+            color: COLORS.amber,
+            marginBottom: 12,
+            gap: 12,
+          }}
+        >
+          <span>
+            ⚠ Mostrando datos de ejemplo. Conecta tu cuenta de Outlook para ver tu calendario real.
+          </span>
+          {onNavigate && (
+            <button
+              onClick={() => onNavigate("settings")}
+              style={{
+                background: COLORS.amber,
+                color: "#000",
+                border: "none",
+                borderRadius: 5,
+                padding: "4px 10px",
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Conectar Outlook
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Error */}
       {error && (

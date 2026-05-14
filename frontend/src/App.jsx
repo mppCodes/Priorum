@@ -31,7 +31,7 @@ export default function App() {
         <div style={s.content}>
           {view === "priority" && <PriorityView tasks={tasks} events={events} />}
           {view === "tasks"    && <TasksView />}
-          {view === "calendar" && <CalendarView />}
+          {view === "calendar" && <CalendarView onNavigate={setView} />}
           {view === "agent"    && <AgentPanel tasks={tasks} events={events} />}
           {view === "settings" && <SettingsView />}
         </div>

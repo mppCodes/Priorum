@@ -30,14 +30,22 @@ def _get_access_token() -> str:
       2. Client Credentials (app-only) como fallback.
     """
     import re
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
 
     # 1. Intentar token OAuth del usuario
     try:
         from app.services import oauth_service
+        status = oauth_service.get_connection_status()
+        _log.debug("OAuth status: connected=%s user=%s", status.get("connected"), status.get("user_email"))
         oauth_token = oauth_service.get_valid_token()
         if oauth_token:
+            _log.info("Usando token OAuth delegado para usuario: %s", status.get("user_email"))
             return oauth_token
-    except Exception:
+        else:
+            _log.info("No hay token OAuth activo, intentando Client Credentials...")
+    except Exception as exc:
+        _log.warning("Error consultando oauth_service: %s", exc)
         pass  # Si oauth_service falla, continuar con client credentials
 
     # 2. Fallback: Client Credentials
@@ -107,59 +115,56 @@ def _graph_headers() -> dict:
 def _parse_graph_event(ev: dict) -> Event:
     """Convierte un evento de Graph API en un objeto Event."""
     import logging
+    from app.models.event import Attendee as EventAttendee
     logger = logging.getLogger(__name__)
     logger.debug("Parseando evento Graph: id=%s subject=%s", ev.get("id"), ev.get("subject"))
 
-    # Usar "or {}" para manejar campos presentes pero con valor null
-    start_dt = (ev.get("start") or {}).get("dateTime", "")
-    end_dt   = (ev.get("end")   or {}).get("dateTime", "")
+    # Parsear fechas
+    start_dt_str = (ev.get("start") or {}).get("dateTime", "")
+    end_dt_str   = (ev.get("end")   or {}).get("dateTime", "")
 
-    # Calcula duración en minutos
-    duration = 30
-    if start_dt and end_dt:
-        try:
-            s = datetime.fromisoformat(start_dt.replace("Z", "+00:00"))
-            e = datetime.fromisoformat(end_dt.replace("Z", "+00:00"))
-            duration = int((e - s).total_seconds() / 60)
-        except Exception:
-            pass
+    now = datetime.now()
+    try:
+        start_dt = datetime.fromisoformat(start_dt_str.replace("Z", "+00:00")) if start_dt_str else now
+    except Exception:
+        start_dt = now
+    try:
+        end_dt = datetime.fromisoformat(end_dt_str.replace("Z", "+00:00")) if end_dt_str else start_dt + timedelta(minutes=30)
+    except Exception:
+        end_dt = start_dt + timedelta(minutes=30)
 
-    # Determina tipo
+    # Determina tipo según categorías de Outlook
     categories = [c.lower() for c in (ev.get("categories") or [])]
-    if "personal" in categories:
-        ev_type = EventType.personal
-    elif "bloqueo" in categories or "block" in categories:
-        ev_type = EventType.bloqueo
+    if "focus" in categories or "foco" in categories:
+        ev_type = EventType.focus
+    elif "personal" in categories:
+        ev_type = EventType.other
+    elif "out of office" in categories or "fuera" in categories:
+        ev_type = EventType.out_of_office
     else:
-        ev_type = EventType.reunion
+        ev_type = EventType.meeting
 
-    attendees = [
-        (a.get("emailAddress") or {}).get("name", "")
-        for a in (ev.get("attendees") or [])
-        if (a.get("emailAddress") or {}).get("name")
-    ]
+    # Construir lista de asistentes
+    attendees = []
+    for a in (ev.get("attendees") or []):
+        addr = (a.get("emailAddress") or {})
+        email = addr.get("address", "")
+        name  = addr.get("name")
+        if email:
+            attendees.append(EventAttendee(email=email, name=name))
 
-    time_str = ""
-    date_str = ""
-    if start_dt:
-        try:
-            dt = datetime.fromisoformat(start_dt.replace("Z", "+00:00"))
-            time_str = dt.strftime("%H:%M")
-            date_str = dt.strftime("%Y-%m-%d")
-        except Exception:
-            pass
+    location = (ev.get("location") or {}).get("displayName")
 
     return Event(
         id=ev.get("id", str(uuid.uuid4())),
-        outlook_id=ev.get("id"),
+        external_id=ev.get("id"),
         title=ev.get("subject", "Sin título"),
-        date=date_str,
-        time=time_str,
-        duration=duration,
-        type=ev_type,
-        notes=ev.get("bodyPreview", ""),
+        description=ev.get("bodyPreview", ""),
+        start=start_dt,
+        end=end_dt,
+        location=location,
         attendees=attendees,
-        teams_url=(ev.get("onlineMeeting") or {}).get("joinUrl"),
+        source="outlook",
     )
 
 
@@ -197,7 +202,14 @@ async def get_events(
 
     # Permitir acceso si hay token OAuth activo, aunque ms_client_id no esté en .env
     from app.services import oauth_service as _oauth
-    has_oauth = bool(_oauth.get_valid_token())
+    oauth_status = _oauth.get_connection_status()
+    has_oauth = oauth_status.get("connected", False)
+    logger.info(
+        "get_events: OAuth connected=%s user=%s | ms_client_id=%s",
+        has_oauth,
+        oauth_status.get("user_email"),
+        bool(settings.ms_client_id),
+    )
     if not has_oauth and (not settings.ms_client_id or not settings.ms_tenant_id):
         return _mock_events()
 
@@ -219,13 +231,21 @@ async def get_events(
     ref = date.fromisoformat(date_ref) if date_ref else date.today()
     start, end = _date_range(period, ref)
 
-    user_email = _get_user_email()
-    if not user_email:
-        logger.warning("No hay email de usuario configurado para Graph API.")
-        return _mock_events()
+    # Con token OAuth delegado usar /me (el usuario autenticado).
+    # Con Client Credentials (app-only) usar /users/{email}.
+    if has_oauth:
+        base_path = "me"
+        logger.info("get_events: usando endpoint /me (token OAuth delegado)")
+    else:
+        user_email = _get_user_email()
+        if not user_email:
+            logger.warning("No hay email de usuario configurado para Graph API.")
+            return _mock_events()
+        base_path = f"users/{user_email}"
+        logger.info("get_events: usando endpoint /users/%s (Client Credentials)", user_email)
 
     url = (
-        f"https://graph.microsoft.com/v1.0/users/{user_email}"
+        f"https://graph.microsoft.com/v1.0/{base_path}"
         f"/calendarView"
         f"?startDateTime={start.isoformat()}Z"
         f"&endDateTime={end.isoformat()}Z"
@@ -234,10 +254,18 @@ async def get_events(
         f"&$select=id,subject,start,end,categories,attendees,bodyPreview,onlineMeeting,showAs"
     )
 
+    logger.info("get_events: llamando a URL → %s", url)
+
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.get(url, headers=headers)
-            logger.info("Graph API status: %s", resp.status_code)
+            logger.info("Graph API status: %s | URL: %s", resp.status_code, url)
+            if not resp.is_success:
+                logger.error(
+                    "Graph API error %s — body: %s",
+                    resp.status_code,
+                    resp.text[:500],
+                )
             resp.raise_for_status()
             data = resp.json()
             logger.info("Graph API response keys: %s", list(data.keys()) if isinstance(data, dict) else type(data))
@@ -298,37 +326,35 @@ async def create_event(data: EventCreate) -> Event:
         )
         raise RuntimeError(f"No se pudo autenticar con Outlook: {exc}") from exc
 
-    start_iso = f"{data.date}T{data.time}:00"
-    end_dt    = datetime.fromisoformat(start_iso) + timedelta(minutes=data.duration)
-
-    # Mapear el tipo de evento a categorías de Outlook
-    # _parse_graph_event usa estas categorías para determinar el tipo al leer
-    _type_to_category: dict[str, list[str]] = {
-        "personal": ["Personal"],
-        "bloqueo":  ["Bloqueo"],
-        "reunion":  [],
-    }
-    categories = _type_to_category.get(str(data.type.value if hasattr(data.type, "value") else data.type), [])
+    start_iso = data.start.isoformat() if data.start else datetime.now().isoformat()
+    end_iso   = data.end.isoformat()   if data.end   else (data.start + timedelta(hours=1)).isoformat()
 
     body: dict = {
         "subject": data.title,
         "start":   {"dateTime": start_iso, "timeZone": "Europe/Madrid"},
-        "end":     {"dateTime": end_dt.isoformat(), "timeZone": "Europe/Madrid"},
-        "body":    {"contentType": "text", "content": data.notes or ""},
+        "end":     {"dateTime": end_iso,   "timeZone": "Europe/Madrid"},
+        "body":    {"contentType": "text", "content": data.description or ""},
         "attendees": [
-            {"emailAddress": {"address": a}, "type": "required"}
+            {
+                "emailAddress": {
+                    "address": a.email if hasattr(a, "email") else str(a),
+                    "name": a.name if hasattr(a, "name") else "",
+                },
+                "type": "required",
+            }
             for a in (data.attendees or [])
         ],
     }
-    if categories:
-        body["categories"] = categories
 
     logger.info(
         "create_event: POST Graph API → subject=%r start=%s user=%s",
         data.title, start_iso, user_email,
     )
 
-    url = f"https://graph.microsoft.com/v1.0/users/{user_email}/events"
+    # Con token OAuth delegado usar /me/events
+    from app.services import oauth_service as _oauth2
+    _base = "me" if bool(_oauth2.get_valid_token()) else f"users/{user_email}"
+    url = f"https://graph.microsoft.com/v1.0/{_base}/events"
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(url, json=body, headers=headers)
@@ -360,12 +386,14 @@ async def update_event(event_id: str, data: EventUpdate) -> Event:
     import httpx
 
     body: dict = {}
-    if data.title    is not None: body["subject"] = data.title
-    if data.notes    is not None: body["body"] = {"contentType": "text", "content": data.notes}
-    if data.date and data.time:
-        body["start"] = {"dateTime": f"{data.date}T{data.time}:00", "timeZone": "Europe/Madrid"}
+    if data.title       is not None: body["subject"] = data.title
+    if data.description is not None: body["body"] = {"contentType": "text", "content": data.description}
+    if data.start       is not None: body["start"] = {"dateTime": data.start.isoformat(), "timeZone": "Europe/Madrid"}
+    if data.end         is not None: body["end"]   = {"dateTime": data.end.isoformat(),   "timeZone": "Europe/Madrid"}
 
-    url = f"https://graph.microsoft.com/v1.0/users/{_get_user_email()}/events/{event_id}"
+    from app.services import oauth_service as _oauth3
+    _base_upd = "me" if bool(_oauth3.get_valid_token()) else f"users/{_get_user_email()}"
+    url = f"https://graph.microsoft.com/v1.0/{_base_upd}/events/{event_id}"
     async with httpx.AsyncClient() as client:
         resp = await client.patch(url, json=body, headers=_graph_headers())
         resp.raise_for_status()
@@ -379,7 +407,9 @@ async def delete_event(event_id: str) -> None:
 
     import httpx
 
-    url = f"https://graph.microsoft.com/v1.0/users/{_get_user_email()}/events/{event_id}"
+    from app.services import oauth_service as _oauth4
+    _base_del = "me" if bool(_oauth4.get_valid_token()) else f"users/{_get_user_email()}"
+    url = f"https://graph.microsoft.com/v1.0/{_base_del}/events/{event_id}"
     async with httpx.AsyncClient() as client:
         resp = await client.delete(url, headers=_graph_headers())
         resp.raise_for_status()
@@ -387,14 +417,39 @@ async def delete_event(event_id: str) -> None:
 
 def _mock_events() -> list[Event]:
     """Datos de ejemplo cuando Outlook no está configurado."""
-    today = date.today().isoformat()
+    from app.models.event import Attendee as EventAttendee
+    today = date.today()
+
+    def _dt(h: int, m: int) -> datetime:
+        return datetime(today.year, today.month, today.day, h, m, 0)
+
     return [
-        Event(id="e1", title="Daily standup",    date=today, time="09:00", duration=15,
-              type=EventType.reunion,  attendees=["Ana", "Paco", "Marta"]),
-        Event(id="e2", title="Revisión sprint",  date=today, time="11:00", duration=60,
-              type=EventType.reunion,  attendees=["Todo el equipo"]),
-        Event(id="e3", title="Cita médica",      date=today, time="13:30", duration=30,
-              type=EventType.personal, attendees=[]),
-        Event(id="e4", title="1:1 con producto", date=today, time="16:00", duration=30,
-              type=EventType.reunion,  attendees=["Laura"]),
+        Event(
+            id="e1", title="Daily standup",
+            start=_dt(9, 0), end=_dt(9, 15),
+            attendees=[
+                EventAttendee(email="ana@empresa.com",  name="Ana"),
+                EventAttendee(email="paco@empresa.com", name="Paco"),
+                EventAttendee(email="marta@empresa.com",name="Marta"),
+            ],
+            source="mock",
+        ),
+        Event(
+            id="e2", title="Revisión sprint",
+            start=_dt(11, 0), end=_dt(12, 0),
+            attendees=[EventAttendee(email="equipo@empresa.com", name="Todo el equipo")],
+            source="mock",
+        ),
+        Event(
+            id="e3", title="Cita médica",
+            start=_dt(13, 30), end=_dt(14, 0),
+            attendees=[],
+            source="mock",
+        ),
+        Event(
+            id="e4", title="1:1 con producto",
+            start=_dt(16, 0), end=_dt(16, 30),
+            attendees=[EventAttendee(email="laura@empresa.com", name="Laura")],
+            source="mock",
+        ),
     ]

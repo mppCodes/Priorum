@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     ms_redirect_uri: str = "http://localhost:8000/api/auth/outlook/callback"
     ms_scopes: list[str] = ["Calendars.ReadWrite", "User.Read"]
     # URL del frontend a la que redirigir tras el callback
-    frontend_url: str = "http://localhost:5173"
+    frontend_url: str = "http://localhost:3000"
 
     # ── OpenAI / LLM ───────────────────────────────────────────────
     openai_api_key: str = ""
