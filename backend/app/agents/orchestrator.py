@@ -83,9 +83,86 @@ orchestrator_agent = Agent(
 )
 
 
-async def run_orchestrator(target_date: str | None = None) -> dict:
+def _tasks_from_list(tasks: list[dict]) -> dict:
+    """Builds a tasks_analysis dict from a plain list of task dicts (frontend format)."""
+    today_str = date.today().isoformat()
+    pending = [t for t in tasks if not t.get("done", False)]
+    return {
+        "tasks": [
+            {
+                "id": t.get("id", str(i)),
+                "title": t.get("title", ""),
+                "project": t.get("project", ""),
+                "priority": t.get("priority", "media"),
+                "deadline": t.get("deadline", ""),
+                "tags": t.get("tags", []),
+                "subtasks_pending": len(t.get("subtasks", [])),
+                "comments_count": len(t.get("comments", [])),
+                "status_analysis": "urgente" if t.get("deadline") == today_str else "activa",
+                "notes": "",
+            }
+            for i, t in enumerate(pending)
+        ],
+        "summary": {
+            "total_pending": len(pending),
+            "urgent": sum(1 for t in pending if t.get("deadline") == today_str),
+            "possibly_blocked": 0,
+            "by_project": {},
+        },
+    }
+
+
+def _calendar_from_list(events: list[dict]) -> dict:
+    """Builds a calendar_analysis dict from a plain list of event dicts (frontend format)."""
+    parsed = []
+    for i, e in enumerate(events):
+        duration = 30
+        start_str = e.get("time", "09:00")
+        try:
+            start_raw = e.get("start")
+            end_raw = e.get("end")
+            if start_raw and end_raw:
+                from datetime import datetime as _dt
+                s = _dt.fromisoformat(str(start_raw).replace("Z", "+00:00"))
+                en = _dt.fromisoformat(str(end_raw).replace("Z", "+00:00"))
+                duration = max(1, int((en - s).total_seconds() / 60))
+                start_str = s.strftime("%H:%M")
+        except Exception:
+            pass
+        parsed.append({
+            "id": e.get("id", str(i)),
+            "title": e.get("title", ""),
+            "time": start_str,
+            "duration_minutes": duration,
+            "type": e.get("type", "reunion"),
+            "attendees_count": len(e.get("attendees") or []),
+        })
+    total_busy = sum(ev["duration_minutes"] for ev in parsed)
+    return {
+        "events": parsed,
+        "free_slots": [],
+        "summary": {
+            "total_events": len(parsed),
+            "total_busy_minutes": total_busy,
+            "total_free_minutes": max(0, 480 - total_busy),
+            "deep_work_slots": 0,
+            "cognitive_load": "alta" if len(parsed) >= 3 else "media" if len(parsed) >= 1 else "baja",
+            "notes": f"{len(parsed)} eventos en el calendario hoy.",
+        },
+    }
+
+
+async def run_orchestrator(
+    target_date: str | None = None,
+    fallback_tasks: list | None = None,
+    fallback_events: list | None = None,
+) -> dict:
     """Run the full orchestration pipeline: Tasks + Calendar in parallel,
-    then Scoring + Context, then final orchestration."""
+    then Scoring + Context, then final orchestration.
+
+    If the agents return empty results, fallback_tasks / fallback_events
+    (provided by the frontend from its own Notion/Outlook cache) are used instead.
+    """
     today = target_date or date.today().isoformat()
     now = datetime.now()
 
@@ -94,6 +171,21 @@ async def run_orchestrator(target_date: str | None = None) -> dict:
         run_tasks_agent(),
         run_calendar_agent(target_date=today),
     )
+
+    # Fallback: if agents returned no data, use what the frontend already loaded
+    if not tasks_result.get("tasks") and fallback_tasks:
+        logger.info(
+            "Tasks Agent returned no tasks; using %d fallback tasks from request",
+            len(fallback_tasks),
+        )
+        tasks_result = _tasks_from_list(fallback_tasks)
+
+    if not calendar_result.get("events") and fallback_events:
+        logger.info(
+            "Calendar Agent returned no events; using %d fallback events from request",
+            len(fallback_events),
+        )
+        calendar_result = _calendar_from_list(fallback_events)
 
     # Phase 2: Scoring and Context in parallel (they depend on phase 1)
     scoring_result, context_result = await asyncio.gather(

@@ -468,6 +468,7 @@ export default function App() {
           {[
             { label: "Outlook", color: COLORS.blue },
             { label: "Notion", color: COLORS.accent },
+            { label: "Jira", color: COLORS.amber },
           ].map(c => (
             <div key={c.label} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, fontSize: 11, color: COLORS.textSecondary }}>
               <div style={{ width: 6, height: 6, borderRadius: "50%", background: c.color }} /> {c.label}

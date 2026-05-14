@@ -6,7 +6,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import tasks, calendar, agent
 from logging_config import setup_logging
 from app.services.mongo import init_db
 
@@ -33,6 +32,8 @@ _mcp_app = jira_mcp.http_app(path="/")
 async def lifespan(app: FastAPI):
     # Re-aplicar tras el arranque de uvicorn (que añade sus propios handlers)
     setup_logging()
+    # Inicializa MongoDB (índices incluidos)
+    await init_db()
     logger.info("Jira MCP server mounted at /mcp")
     # Run the MCP app's lifespan so its internal task group is initialized
     async with _mcp_app.lifespan(_mcp_app):
@@ -57,11 +58,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Startup: inicializa MongoDB (índices incluidos)
-@app.on_event("startup")
-async def startup() -> None:
-    await init_db()
 
 # Routers
 app.include_router(tasks_router,    prefix=settings.api_prefix)

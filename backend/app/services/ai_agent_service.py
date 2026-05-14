@@ -60,7 +60,11 @@ async def get_priorities(req: PrioritiesRequest) -> PrioritiesResponse:
 
     try:
         from app.agents.orchestrator import run_orchestrator
-        result = await run_orchestrator(target_date=req.date)
+        result = await run_orchestrator(
+            target_date=req.date,
+            fallback_tasks=req.tasks if req.tasks else None,
+            fallback_events=req.events if req.events else None,
+        )
 
         # Mapear el output del orquestador al modelo PrioritiesResponse
         priorities = []
@@ -91,7 +95,11 @@ async def get_schedule(req: ScheduleRequest) -> ScheduleResponse:
 
     try:
         from app.agents.orchestrator import run_orchestrator
-        result = await run_orchestrator(target_date=req.date)
+        result = await run_orchestrator(
+            target_date=req.date,
+            fallback_tasks=req.tasks if req.tasks else None,
+            fallback_events=req.events if req.events else None,
+        )
 
         return ScheduleResponse(
             schedule=result.get("schedule", []),
