@@ -24,7 +24,8 @@ class Settings(BaseSettings):
 
     # ── OpenAI / LLM ───────────────────────────────────────────────
     openai_api_key: str = ""
-    openai_model: str = "gpt-4o"
+    openai_base_url: str = ""  # URL base personalizada (proxy/gateway)
+    openai_model: str = ""
     openai_temperature: float = 0.3
     # Embeddings para RAG (usado por Qdrant)
     openai_embedding_model: str = "text-embedding-3-small"

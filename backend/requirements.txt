@@ -13,6 +13,7 @@ msal>=1.29.0
 
 # AI Agent
 openai>=1.35.0
+openai-agents>=0.1.0
 
 # Utilidades
 python-dateutil>=2.9.0
