@@ -10,16 +10,18 @@ from agents import Agent, Runner, ModelSettings, OpenAIChatCompletionsModel
 from app.agents.client import openai_client, MODEL_NAME
 from app.agents.tools.notion_tools import get_tasks, create_task, update_task, add_comment, delete_task
 from app.agents.tools.outlook_tools import get_events, create_event
+from app.agents.tools.mcp_tools import MCP_TOOLS
 
 logger = logging.getLogger(__name__)
 
-CHAT_AGENT_INSTRUCTIONS = """Eres el asistente personal del usuario en Priorum, una app de productividad conectada a Notion y Outlook.
+CHAT_AGENT_INSTRUCTIONS = """Eres el asistente personal del usuario en Priorum, una app de productividad conectada a Notion, Outlook y Jira.
 
 Tu nombre es Priorum. Hablas en español, en tono directo y sin florituras. Eres útil y concreto: cuando el usuario te pide algo que puedes hacer, lo haces. No preguntas si quieres que lo hagas, simplemente lo haces y confirmas.
 
 CAPACIDADES:
 - Puedes consultar, crear, actualizar y comentar tareas de Notion
 - Puedes consultar y crear eventos en Outlook
+- Puedes crear tarjetas (issues) en Jira con título, prioridad, proyecto, fecha límite y etiquetas
 - Puedes responder preguntas sobre la agenda del día, tareas pendientes o prioridades
 - Puedes razonar sobre qué debería hacer el usuario a continuación
 
@@ -31,6 +33,7 @@ Este contexto está en el system message y debes usarlo para dar respuestas situ
 
 COMPORTAMIENTO:
 - Si el usuario dice "crea una tarea para revisar el PR mañana" → llama a create_task con los datos extraídos, confirma con una línea.
+- Si el usuario dice "crea una tarjeta en Jira para el bug de login" → llama a crear_tarjeta_jira con los datos extraídos, confirma con una línea.
 - Si el usuario dice "añade una cita médica el jueves a las 13:00" → llama a create_event, confirma con una línea.
 - Si el usuario pregunta "¿qué debería hacer ahora?" → razona con el contexto del día y da una respuesta directa de máximo 3 puntos.
 - Si el usuario pregunta algo que no está en tus datos → dilo claramente y ofrece consultar Notion u Outlook si aplica.
@@ -52,7 +55,7 @@ RESTRICCIONES:
 chat_agent = Agent(
     name="Chat Agent",
     instructions=CHAT_AGENT_INSTRUCTIONS,
-    tools=[get_tasks, create_task, update_task, add_comment, delete_task, get_events, create_event],
+    tools=[get_tasks, create_task, update_task, add_comment, delete_task, get_events, create_event, *MCP_TOOLS],
     model=OpenAIChatCompletionsModel(model=MODEL_NAME, openai_client=openai_client),
     model_settings=ModelSettings(temperature=0.5),
 )
